@@ -1,0 +1,2165 @@
+{
+  "app": {
+    "name": "E-Commerce Platform",
+    "version": "2.1.0",
+    "description": "Customer-facing e-commerce web app with payment processing.",
+    "owner": "Platform Security Team",
+    "team": "Product Engineering",
+    "environment": "production",
+    "internet_facing": true,
+    "data_classification": "confidential",
+    "components": [
+      {
+        "name": "Web App",
+        "type": "web_app",
+        "description": "React SPA served via CDN",
+        "technology": "React 18, TypeScript",
+        "auth_type": "jwt",
+        "stores_pii": false,
+        "stores_credentials": false,
+        "internet_facing": true,
+        "has_logging": true,
+        "has_rate_limiting": false,
+        "trust_boundary": "DMZ",
+        "notes": ""
+      },
+      {
+        "name": "API Gateway",
+        "type": "api",
+        "description": "REST API gateway \u2014 all client traffic enters here",
+        "technology": "Python/FastAPI, Nginx",
+        "auth_type": "jwt",
+        "stores_pii": false,
+        "stores_credentials": false,
+        "internet_facing": true,
+        "has_logging": true,
+        "has_rate_limiting": true,
+        "trust_boundary": "DMZ",
+        "notes": ""
+      },
+      {
+        "name": "Auth Service",
+        "type": "auth_service",
+        "description": "Handles login, registration, MFA, session management",
+        "technology": "Python 3.11, PostgreSQL",
+        "auth_type": "jwt",
+        "stores_pii": true,
+        "stores_credentials": true,
+        "internet_facing": false,
+        "has_logging": true,
+        "has_rate_limiting": true,
+        "trust_boundary": "Internal",
+        "notes": ""
+      },
+      {
+        "name": "Order Service",
+        "type": "api",
+        "description": "Order processing microservice",
+        "technology": "Python 3.11, FastAPI",
+        "auth_type": "jwt",
+        "stores_pii": true,
+        "stores_credentials": false,
+        "internet_facing": false,
+        "has_logging": true,
+        "has_rate_limiting": false,
+        "trust_boundary": "Internal",
+        "notes": ""
+      },
+      {
+        "name": "Payment Service",
+        "type": "api",
+        "description": "Payment processing \u2014 integrates with Stripe",
+        "technology": "Python 3.11, Stripe SDK",
+        "auth_type": "mtls",
+        "stores_pii": true,
+        "stores_credentials": true,
+        "internet_facing": false,
+        "has_logging": true,
+        "has_rate_limiting": true,
+        "trust_boundary": "Internal",
+        "notes": ""
+      },
+      {
+        "name": "PostgreSQL Database",
+        "type": "database",
+        "description": "Primary relational database \u2014 users, orders, products",
+        "technology": "PostgreSQL 15",
+        "auth_type": "basic",
+        "stores_pii": true,
+        "stores_credentials": true,
+        "internet_facing": false,
+        "has_logging": false,
+        "has_rate_limiting": false,
+        "trust_boundary": "Internal",
+        "notes": ""
+      },
+      {
+        "name": "Redis Cache",
+        "type": "cache",
+        "description": "Session cache and rate limit counters",
+        "technology": "Redis 7",
+        "auth_type": "none",
+        "stores_pii": false,
+        "stores_credentials": true,
+        "internet_facing": false,
+        "has_logging": false,
+        "has_rate_limiting": false,
+        "trust_boundary": "Internal",
+        "notes": ""
+      }
+    ],
+    "data_flows": [
+      {
+        "name": "Browser to API Gateway",
+        "source": "Browser",
+        "destination": "API Gateway",
+        "data_classification": "confidential",
+        "encrypted": true,
+        "authenticated": true,
+        "crosses_trust_boundary": true,
+        "protocol": "HTTPS",
+        "notes": ""
+      },
+      {
+        "name": "API Gateway to Auth Service",
+        "source": "API Gateway",
+        "destination": "Auth Service",
+        "data_classification": "confidential",
+        "encrypted": true,
+        "authenticated": true,
+        "crosses_trust_boundary": true,
+        "protocol": "HTTPS",
+        "notes": ""
+      },
+      {
+        "name": "API Gateway to Order Service",
+        "source": "API Gateway",
+        "destination": "Order Service",
+        "data_classification": "confidential",
+        "encrypted": false,
+        "authenticated": true,
+        "crosses_trust_boundary": true,
+        "protocol": "HTTP",
+        "notes": ""
+      },
+      {
+        "name": "Order Service to Database",
+        "source": "Order Service",
+        "destination": "PostgreSQL Database",
+        "data_classification": "confidential",
+        "encrypted": false,
+        "authenticated": true,
+        "crosses_trust_boundary": false,
+        "protocol": "TCP",
+        "notes": ""
+      },
+      {
+        "name": "Auth Service to Redis",
+        "source": "Auth Service",
+        "destination": "Redis Cache",
+        "data_classification": "internal",
+        "encrypted": false,
+        "authenticated": false,
+        "crosses_trust_boundary": false,
+        "protocol": "TCP",
+        "notes": ""
+      },
+      {
+        "name": "Payment Service to Stripe",
+        "source": "Payment Service",
+        "destination": "Stripe API",
+        "data_classification": "restricted",
+        "encrypted": true,
+        "authenticated": true,
+        "crosses_trust_boundary": true,
+        "protocol": "HTTPS",
+        "notes": ""
+      }
+    ],
+    "trust_boundaries": [
+      {
+        "name": "Internet",
+        "components": [
+          "Browser",
+          "Mobile App"
+        ],
+        "description": "Untrusted public internet"
+      },
+      {
+        "name": "DMZ",
+        "components": [
+          "API Gateway",
+          "Web App"
+        ],
+        "description": "Demilitarised zone \u2014 internet-facing services"
+      },
+      {
+        "name": "Internal",
+        "components": [
+          "Auth Service",
+          "Order Service",
+          "Payment Service",
+          "Database",
+          "Cache"
+        ],
+        "description": "Trusted internal network"
+      }
+    ],
+    "compliance_frameworks": [
+      "gdpr",
+      "pci_dss"
+    ]
+  },
+  "threats": [
+    {
+      "id": "T001-02",
+      "title": "Injection Attack \u2014 Web App",
+      "stride_category": "Tampering",
+      "component": "Web App",
+      "description": "Malicious input reaches Web App without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.",
+      "attack_vector": "Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.",
+      "business_impact": "Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).",
+      "likelihood": 4,
+      "impact": 5,
+      "risk_score": 80,
+      "severity": "Critical",
+      "mitigations": [
+        "Parameterise all database queries \u2014 never concatenate user input.",
+        "Implement strict input validation and allowlisting at every entry point.",
+        "Deploy WAF rules for SQLi, XSS, command injection patterns.",
+        "Use Content Security Policy headers to mitigate XSS impact.",
+        "Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1190",
+          "technique_name": "Exploit Public-Facing Application",
+          "tactic": "Initial Access",
+          "url": "https://attack.mitre.org/techniques/T1190/"
+        },
+        {
+          "technique_id": "T1059",
+          "technique_name": "Command and Scripting Interpreter",
+          "tactic": "Execution",
+          "url": "https://attack.mitre.org/techniques/T1059/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A03:2021",
+          "category_name": "Injection",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SI-10",
+          "control_name": "Information Input Validation",
+          "family": "System Integrity"
+        },
+        {
+          "control_id": "SA-11",
+          "control_name": "Developer Testing and Evaluation",
+          "family": "System Acquisition"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T002-02",
+      "title": "Injection Attack \u2014 API Gateway",
+      "stride_category": "Tampering",
+      "component": "API Gateway",
+      "description": "Malicious input reaches API Gateway without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.",
+      "attack_vector": "Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.",
+      "business_impact": "Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).",
+      "likelihood": 4,
+      "impact": 5,
+      "risk_score": 80,
+      "severity": "Critical",
+      "mitigations": [
+        "Parameterise all database queries \u2014 never concatenate user input.",
+        "Implement strict input validation and allowlisting at every entry point.",
+        "Deploy WAF rules for SQLi, XSS, command injection patterns.",
+        "Use Content Security Policy headers to mitigate XSS impact.",
+        "Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1190",
+          "technique_name": "Exploit Public-Facing Application",
+          "tactic": "Initial Access",
+          "url": "https://attack.mitre.org/techniques/T1190/"
+        },
+        {
+          "technique_id": "T1059",
+          "technique_name": "Command and Scripting Interpreter",
+          "tactic": "Execution",
+          "url": "https://attack.mitre.org/techniques/T1059/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A03:2021",
+          "category_name": "Injection",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SI-10",
+          "control_name": "Information Input Validation",
+          "family": "System Integrity"
+        },
+        {
+          "control_id": "SA-11",
+          "control_name": "Developer Testing and Evaluation",
+          "family": "System Acquisition"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T001-01",
+      "title": "Identity Spoofing \u2014 Web App",
+      "stride_category": "Spoofing",
+      "component": "Web App",
+      "description": "Attacker impersonates a legitimate user or service accessing Web App via credential theft, session hijacking, or weak authentication bypass.",
+      "attack_vector": "Credential stuffing, brute-force, stolen session tokens, OAuth token replay.",
+      "business_impact": "Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.",
+      "likelihood": 4,
+      "impact": 4,
+      "risk_score": 64,
+      "severity": "High",
+      "mitigations": [
+        "Enforce MFA on all user-facing authentication flows.",
+        "Implement account lockout after 5 failed attempts.",
+        "Use short-lived JWTs with refresh token rotation.",
+        "Monitor for credential stuffing patterns (IP velocity, geo-anomalies)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1110",
+          "technique_name": "Brute Force",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1110/"
+        },
+        {
+          "technique_id": "T1539",
+          "technique_name": "Steal Web Session Cookie",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1539/"
+        },
+        {
+          "technique_id": "T1078",
+          "technique_name": "Valid Accounts",
+          "tactic": "Defense Evasion / Persistence",
+          "url": "https://attack.mitre.org/techniques/T1078/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A07:2021",
+          "category_name": "Identification and Authentication Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "IA-2",
+          "control_name": "Identification and Authentication",
+          "family": "IA"
+        },
+        {
+          "control_id": "IA-5",
+          "control_name": "Authenticator Management",
+          "family": "IA"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T002-01",
+      "title": "Identity Spoofing \u2014 API Gateway",
+      "stride_category": "Spoofing",
+      "component": "API Gateway",
+      "description": "Attacker impersonates a legitimate user or service accessing API Gateway via credential theft, session hijacking, or weak authentication bypass.",
+      "attack_vector": "Credential stuffing, brute-force, stolen session tokens, OAuth token replay.",
+      "business_impact": "Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.",
+      "likelihood": 4,
+      "impact": 4,
+      "risk_score": 64,
+      "severity": "High",
+      "mitigations": [
+        "Enforce MFA on all user-facing authentication flows.",
+        "Implement account lockout after 5 failed attempts.",
+        "Use short-lived JWTs with refresh token rotation.",
+        "Monitor for credential stuffing patterns (IP velocity, geo-anomalies)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1110",
+          "technique_name": "Brute Force",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1110/"
+        },
+        {
+          "technique_id": "T1539",
+          "technique_name": "Steal Web Session Cookie",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1539/"
+        },
+        {
+          "technique_id": "T1078",
+          "technique_name": "Valid Accounts",
+          "tactic": "Defense Evasion / Persistence",
+          "url": "https://attack.mitre.org/techniques/T1078/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A07:2021",
+          "category_name": "Identification and Authentication Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "IA-2",
+          "control_name": "Identification and Authentication",
+          "family": "IA"
+        },
+        {
+          "control_id": "IA-5",
+          "control_name": "Authenticator Management",
+          "family": "IA"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T001-06",
+      "title": "Broken Access Control \u2014 Web App",
+      "stride_category": "Elevation of Privilege",
+      "component": "Web App",
+      "description": "Insufficient authorisation checks in Web App allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.",
+      "attack_vector": "Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.",
+      "business_impact": "Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 \u2014 #1 OWASP risk.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Enforce authorisation checks server-side for every resource access \u2014 never trust client claims.",
+        "Implement RBAC/ABAC framework; deny by default.",
+        "Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.",
+        "Validate JWT signature and algorithm server-side; reject 'alg: none'.",
+        "Automated DAST scans for authorisation bypass in CI/CD."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1548",
+          "technique_name": "Abuse Elevation Control Mechanism",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1548/"
+        },
+        {
+          "technique_id": "T1134",
+          "technique_name": "Access Token Manipulation",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1134/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T002-06",
+      "title": "Broken Access Control \u2014 API Gateway",
+      "stride_category": "Elevation of Privilege",
+      "component": "API Gateway",
+      "description": "Insufficient authorisation checks in API Gateway allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.",
+      "attack_vector": "Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.",
+      "business_impact": "Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 \u2014 #1 OWASP risk.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Enforce authorisation checks server-side for every resource access \u2014 never trust client claims.",
+        "Implement RBAC/ABAC framework; deny by default.",
+        "Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.",
+        "Validate JWT signature and algorithm server-side; reject 'alg: none'.",
+        "Automated DAST scans for authorisation bypass in CI/CD."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1548",
+          "technique_name": "Abuse Elevation Control Mechanism",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1548/"
+        },
+        {
+          "technique_id": "T1134",
+          "technique_name": "Access Token Manipulation",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1134/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T003-01",
+      "title": "Identity Spoofing \u2014 Auth Service",
+      "stride_category": "Spoofing",
+      "component": "Auth Service",
+      "description": "Attacker impersonates a legitimate user or service accessing Auth Service via credential theft, session hijacking, or weak authentication bypass.",
+      "attack_vector": "Credential stuffing, brute-force, stolen session tokens, OAuth token replay.",
+      "business_impact": "Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Enforce MFA on all user-facing authentication flows.",
+        "Implement account lockout after 5 failed attempts.",
+        "Use short-lived JWTs with refresh token rotation.",
+        "Monitor for credential stuffing patterns (IP velocity, geo-anomalies)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1110",
+          "technique_name": "Brute Force",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1110/"
+        },
+        {
+          "technique_id": "T1539",
+          "technique_name": "Steal Web Session Cookie",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1539/"
+        },
+        {
+          "technique_id": "T1078",
+          "technique_name": "Valid Accounts",
+          "tactic": "Defense Evasion / Persistence",
+          "url": "https://attack.mitre.org/techniques/T1078/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A07:2021",
+          "category_name": "Identification and Authentication Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "IA-2",
+          "control_name": "Identification and Authentication",
+          "family": "IA"
+        },
+        {
+          "control_id": "IA-5",
+          "control_name": "Authenticator Management",
+          "family": "IA"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T003-03",
+      "title": "Sensitive Data Exposure \u2014 Auth Service",
+      "stride_category": "Information Disclosure",
+      "component": "Auth Service",
+      "description": "Auth Service stores PII and/or credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.",
+      "attack_vector": "Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.",
+      "business_impact": "GDPR breach notification required within 72 hours. Fines up to \u20ac20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Encrypt PII at rest using AES-256; rotate encryption keys annually.",
+        "Implement field-level encryption for highly sensitive fields (SSN, payment data).",
+        "Apply data masking in non-production environments.",
+        "Enforce column-level access control \u2014 limit which roles can SELECT PII columns.",
+        "Audit all queries touching PII tables."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1213",
+          "technique_name": "Data from Information Repositories",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1213/"
+        },
+        {
+          "technique_id": "T1530",
+          "technique_name": "Data from Cloud Storage",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1530/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        },
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-28",
+          "control_name": "Protection of Information at Rest",
+          "family": "System and Comm"
+        },
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T004-01",
+      "title": "Identity Spoofing \u2014 Order Service",
+      "stride_category": "Spoofing",
+      "component": "Order Service",
+      "description": "Attacker impersonates a legitimate user or service accessing Order Service via credential theft, session hijacking, or weak authentication bypass.",
+      "attack_vector": "Credential stuffing, brute-force, stolen session tokens, OAuth token replay.",
+      "business_impact": "Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Enforce MFA on all user-facing authentication flows.",
+        "Implement account lockout after 5 failed attempts.",
+        "Use short-lived JWTs with refresh token rotation.",
+        "Monitor for credential stuffing patterns (IP velocity, geo-anomalies)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1110",
+          "technique_name": "Brute Force",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1110/"
+        },
+        {
+          "technique_id": "T1539",
+          "technique_name": "Steal Web Session Cookie",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1539/"
+        },
+        {
+          "technique_id": "T1078",
+          "technique_name": "Valid Accounts",
+          "tactic": "Defense Evasion / Persistence",
+          "url": "https://attack.mitre.org/techniques/T1078/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A07:2021",
+          "category_name": "Identification and Authentication Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "IA-2",
+          "control_name": "Identification and Authentication",
+          "family": "IA"
+        },
+        {
+          "control_id": "IA-5",
+          "control_name": "Authenticator Management",
+          "family": "IA"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T004-02",
+      "title": "Injection Attack \u2014 Order Service",
+      "stride_category": "Tampering",
+      "component": "Order Service",
+      "description": "Malicious input reaches Order Service without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.",
+      "attack_vector": "Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.",
+      "business_impact": "Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Parameterise all database queries \u2014 never concatenate user input.",
+        "Implement strict input validation and allowlisting at every entry point.",
+        "Deploy WAF rules for SQLi, XSS, command injection patterns.",
+        "Use Content Security Policy headers to mitigate XSS impact.",
+        "Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1190",
+          "technique_name": "Exploit Public-Facing Application",
+          "tactic": "Initial Access",
+          "url": "https://attack.mitre.org/techniques/T1190/"
+        },
+        {
+          "technique_id": "T1059",
+          "technique_name": "Command and Scripting Interpreter",
+          "tactic": "Execution",
+          "url": "https://attack.mitre.org/techniques/T1059/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A03:2021",
+          "category_name": "Injection",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SI-10",
+          "control_name": "Information Input Validation",
+          "family": "System Integrity"
+        },
+        {
+          "control_id": "SA-11",
+          "control_name": "Developer Testing and Evaluation",
+          "family": "System Acquisition"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T004-04",
+      "title": "Sensitive Data Exposure \u2014 Order Service",
+      "stride_category": "Information Disclosure",
+      "component": "Order Service",
+      "description": "Order Service stores PII. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.",
+      "attack_vector": "Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.",
+      "business_impact": "GDPR breach notification required within 72 hours. Fines up to \u20ac20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Encrypt PII at rest using AES-256; rotate encryption keys annually.",
+        "Implement field-level encryption for highly sensitive fields (SSN, payment data).",
+        "Apply data masking in non-production environments.",
+        "Enforce column-level access control \u2014 limit which roles can SELECT PII columns.",
+        "Audit all queries touching PII tables."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1213",
+          "technique_name": "Data from Information Repositories",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1213/"
+        },
+        {
+          "technique_id": "T1530",
+          "technique_name": "Data from Cloud Storage",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1530/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        },
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-28",
+          "control_name": "Protection of Information at Rest",
+          "family": "System and Comm"
+        },
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T005-01",
+      "title": "Identity Spoofing \u2014 Payment Service",
+      "stride_category": "Spoofing",
+      "component": "Payment Service",
+      "description": "Attacker impersonates a legitimate user or service accessing Payment Service via credential theft, session hijacking, or weak authentication bypass.",
+      "attack_vector": "Credential stuffing, brute-force, stolen session tokens, OAuth token replay.",
+      "business_impact": "Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Enforce MFA on all user-facing authentication flows.",
+        "Implement account lockout after 5 failed attempts.",
+        "Use short-lived JWTs with refresh token rotation.",
+        "Monitor for credential stuffing patterns (IP velocity, geo-anomalies)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1110",
+          "technique_name": "Brute Force",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1110/"
+        },
+        {
+          "technique_id": "T1539",
+          "technique_name": "Steal Web Session Cookie",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1539/"
+        },
+        {
+          "technique_id": "T1078",
+          "technique_name": "Valid Accounts",
+          "tactic": "Defense Evasion / Persistence",
+          "url": "https://attack.mitre.org/techniques/T1078/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A07:2021",
+          "category_name": "Identification and Authentication Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "IA-2",
+          "control_name": "Identification and Authentication",
+          "family": "IA"
+        },
+        {
+          "control_id": "IA-5",
+          "control_name": "Authenticator Management",
+          "family": "IA"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T005-02",
+      "title": "Injection Attack \u2014 Payment Service",
+      "stride_category": "Tampering",
+      "component": "Payment Service",
+      "description": "Malicious input reaches Payment Service without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.",
+      "attack_vector": "Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.",
+      "business_impact": "Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Parameterise all database queries \u2014 never concatenate user input.",
+        "Implement strict input validation and allowlisting at every entry point.",
+        "Deploy WAF rules for SQLi, XSS, command injection patterns.",
+        "Use Content Security Policy headers to mitigate XSS impact.",
+        "Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1190",
+          "technique_name": "Exploit Public-Facing Application",
+          "tactic": "Initial Access",
+          "url": "https://attack.mitre.org/techniques/T1190/"
+        },
+        {
+          "technique_id": "T1059",
+          "technique_name": "Command and Scripting Interpreter",
+          "tactic": "Execution",
+          "url": "https://attack.mitre.org/techniques/T1059/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A03:2021",
+          "category_name": "Injection",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SI-10",
+          "control_name": "Information Input Validation",
+          "family": "System Integrity"
+        },
+        {
+          "control_id": "SA-11",
+          "control_name": "Developer Testing and Evaluation",
+          "family": "System Acquisition"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T005-04",
+      "title": "Sensitive Data Exposure \u2014 Payment Service",
+      "stride_category": "Information Disclosure",
+      "component": "Payment Service",
+      "description": "Payment Service stores PII and/or credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.",
+      "attack_vector": "Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.",
+      "business_impact": "GDPR breach notification required within 72 hours. Fines up to \u20ac20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Encrypt PII at rest using AES-256; rotate encryption keys annually.",
+        "Implement field-level encryption for highly sensitive fields (SSN, payment data).",
+        "Apply data masking in non-production environments.",
+        "Enforce column-level access control \u2014 limit which roles can SELECT PII columns.",
+        "Audit all queries touching PII tables."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1213",
+          "technique_name": "Data from Information Repositories",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1213/"
+        },
+        {
+          "technique_id": "T1530",
+          "technique_name": "Data from Cloud Storage",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1530/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        },
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-28",
+          "control_name": "Protection of Information at Rest",
+          "family": "System and Comm"
+        },
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T006-01",
+      "title": "Data Tampering \u2014 PostgreSQL Database",
+      "stride_category": "Tampering",
+      "component": "PostgreSQL Database",
+      "description": "Attacker with excessive DB privileges or via SQLi modifies records in PostgreSQL Database, corrupting financial data, audit trails, or application state.",
+      "attack_vector": "Overprivileged service accounts, SQLi through upstream app, insider access.",
+      "business_impact": "Data integrity loss. Corrupted financial records trigger compliance audit failures. Reverting tampered data requires costly forensic investigation.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Apply least-privilege \u2014 app service account: SELECT/INSERT/UPDATE only, no DDL/DROP.",
+        "Enable database audit logging for all DDL and bulk operations.",
+        "Implement row-level checksums or audit tables for sensitive records.",
+        "Restrict direct DB access to DB admins via PAM jump server."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1565",
+          "technique_name": "Data Manipulation",
+          "tactic": "Impact",
+          "url": "https://attack.mitre.org/techniques/T1565/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        },
+        {
+          "category_id": "A04:2021",
+          "category_name": "Insecure Design",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        },
+        {
+          "control_id": "AU-2",
+          "control_name": "Event Logging",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T006-03",
+      "title": "Sensitive Data Exposure \u2014 PostgreSQL Database",
+      "stride_category": "Information Disclosure",
+      "component": "PostgreSQL Database",
+      "description": "PostgreSQL Database stores PII and/or credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.",
+      "attack_vector": "Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.",
+      "business_impact": "GDPR breach notification required within 72 hours. Fines up to \u20ac20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Encrypt PII at rest using AES-256; rotate encryption keys annually.",
+        "Implement field-level encryption for highly sensitive fields (SSN, payment data).",
+        "Apply data masking in non-production environments.",
+        "Enforce column-level access control \u2014 limit which roles can SELECT PII columns.",
+        "Audit all queries touching PII tables."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1213",
+          "technique_name": "Data from Information Repositories",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1213/"
+        },
+        {
+          "technique_id": "T1530",
+          "technique_name": "Data from Cloud Storage",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1530/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        },
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-28",
+          "control_name": "Protection of Information at Rest",
+          "family": "System and Comm"
+        },
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 1
+    },
+    {
+      "id": "DF003-01",
+      "title": "Unencrypted Data Flow \u2014 API Gateway \u2192 Order Service",
+      "stride_category": "Information Disclosure",
+      "component": "API Gateway \u2192 Order Service",
+      "description": "Data flow 'API Gateway to Order Service' transmits confidential data in plaintext over HTTP. Network-positioned attacker can capture and read all traffic.",
+      "attack_vector": "Man-in-the-middle attack, network tap, ARP poisoning on internal segments.",
+      "business_impact": "Full plaintext exposure of all transmitted data. If confidential/restricted: immediate GDPR breach trigger. Credentials in transit = complete system compromise.",
+      "likelihood": 3,
+      "impact": 5,
+      "risk_score": 60,
+      "severity": "High",
+      "mitigations": [
+        "Upgrade HTTP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.",
+        "Implement mutual TLS (mTLS) for service-to-service flows.",
+        "Disable HTTP fallback; HSTS with 1-year max-age."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1552",
+          "technique_name": "Unsecured Credentials",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1552/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-8",
+          "control_name": "Transmission Confidentiality and Integrity",
+          "family": "System and Comm"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 1
+    },
+    {
+      "id": "T001-05",
+      "title": "Application-Layer DoS \u2014 Web App",
+      "stride_category": "Denial of Service",
+      "component": "Web App",
+      "description": "Attacker floods Web App with high-cost requests (complex queries, large uploads, expensive computations) causing resource exhaustion and service unavailability.",
+      "attack_vector": "HTTP flood, slow-loris, algorithmic complexity attacks, XML/JSON bombs.",
+      "business_impact": "Service outage. SLA breach \u2014 potential penalties. Revenue loss during downtime. Reputational damage to brand.",
+      "likelihood": 4,
+      "impact": 3,
+      "risk_score": 48,
+      "severity": "Medium",
+      "mitigations": [
+        "Implement rate limiting per IP and per authenticated user.",
+        "Set request size limits and connection timeouts.",
+        "Deploy CDN with DDoS protection (Cloudflare/AWS Shield) in front of service.",
+        "Implement circuit breakers for downstream dependencies."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1499",
+          "technique_name": "Endpoint Denial of Service",
+          "tactic": "Impact",
+          "url": "https://attack.mitre.org/techniques/T1499/"
+        },
+        {
+          "technique_id": "T1498",
+          "technique_name": "Network Denial of Service",
+          "tactic": "Impact",
+          "url": "https://attack.mitre.org/techniques/T1498/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A04:2021",
+          "category_name": "Insecure Design",
+          "year": 2021
+        },
+        {
+          "category_id": "A05:2021",
+          "category_name": "Security Misconfiguration",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "CP-10",
+          "control_name": "System Recovery and Reconstitution",
+          "family": "Contingency Planning"
+        },
+        {
+          "control_id": "AC-17",
+          "control_name": "Remote Access",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T006-02",
+      "title": "Missing Audit Trail \u2014 PostgreSQL Database",
+      "stride_category": "Repudiation",
+      "component": "PostgreSQL Database",
+      "description": "PostgreSQL Database does not log critical operations, allowing an attacker (or insider) to perform actions that cannot be attributed or reconstructed.",
+      "attack_vector": "Any action within the component \u2014 no evidence remains after the fact.",
+      "business_impact": "Incident response is blind. Regulatory fines for inadequate audit trails (GDPR Art. 30, SOC2 CC7). Legal liability if breach cannot be scoped.",
+      "likelihood": 3,
+      "impact": 4,
+      "risk_score": 48,
+      "severity": "Medium",
+      "mitigations": [
+        "Implement structured logging (JSON) for all state-changing operations.",
+        "Ship logs to centralised SIEM (Splunk/ELK) with tamper-evident storage.",
+        "Include user ID, IP, timestamp, action, and resource in every log event.",
+        "Set log retention minimum 90 days hot, 1 year cold."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1562",
+          "technique_name": "Impair Defenses",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1562/"
+        },
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-2",
+          "control_name": "Event Logging",
+          "family": "Audit and Accountability"
+        },
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T007-01",
+      "title": "Missing Audit Trail \u2014 Redis Cache",
+      "stride_category": "Repudiation",
+      "component": "Redis Cache",
+      "description": "Redis Cache does not log critical operations, allowing an attacker (or insider) to perform actions that cannot be attributed or reconstructed.",
+      "attack_vector": "Any action within the component \u2014 no evidence remains after the fact.",
+      "business_impact": "Incident response is blind. Regulatory fines for inadequate audit trails (GDPR Art. 30, SOC2 CC7). Legal liability if breach cannot be scoped.",
+      "likelihood": 3,
+      "impact": 4,
+      "risk_score": 48,
+      "severity": "Medium",
+      "mitigations": [
+        "Implement structured logging (JSON) for all state-changing operations.",
+        "Ship logs to centralised SIEM (Splunk/ELK) with tamper-evident storage.",
+        "Include user ID, IP, timestamp, action, and resource in every log event.",
+        "Set log retention minimum 90 days hot, 1 year cold."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1562",
+          "technique_name": "Impair Defenses",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1562/"
+        },
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-2",
+          "control_name": "Event Logging",
+          "family": "Audit and Accountability"
+        },
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T003-04",
+      "title": "Broken Access Control \u2014 Auth Service",
+      "stride_category": "Elevation of Privilege",
+      "component": "Auth Service",
+      "description": "Insufficient authorisation checks in Auth Service allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.",
+      "attack_vector": "Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.",
+      "business_impact": "Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 \u2014 #1 OWASP risk.",
+      "likelihood": 2,
+      "impact": 5,
+      "risk_score": 40,
+      "severity": "Medium",
+      "mitigations": [
+        "Enforce authorisation checks server-side for every resource access \u2014 never trust client claims.",
+        "Implement RBAC/ABAC framework; deny by default.",
+        "Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.",
+        "Validate JWT signature and algorithm server-side; reject 'alg: none'.",
+        "Automated DAST scans for authorisation bypass in CI/CD."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1548",
+          "technique_name": "Abuse Elevation Control Mechanism",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1548/"
+        },
+        {
+          "technique_id": "T1134",
+          "technique_name": "Access Token Manipulation",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1134/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T004-05",
+      "title": "Broken Access Control \u2014 Order Service",
+      "stride_category": "Elevation of Privilege",
+      "component": "Order Service",
+      "description": "Insufficient authorisation checks in Order Service allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.",
+      "attack_vector": "Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.",
+      "business_impact": "Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 \u2014 #1 OWASP risk.",
+      "likelihood": 2,
+      "impact": 5,
+      "risk_score": 40,
+      "severity": "Medium",
+      "mitigations": [
+        "Enforce authorisation checks server-side for every resource access \u2014 never trust client claims.",
+        "Implement RBAC/ABAC framework; deny by default.",
+        "Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.",
+        "Validate JWT signature and algorithm server-side; reject 'alg: none'.",
+        "Automated DAST scans for authorisation bypass in CI/CD."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1548",
+          "technique_name": "Abuse Elevation Control Mechanism",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1548/"
+        },
+        {
+          "technique_id": "T1134",
+          "technique_name": "Access Token Manipulation",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1134/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T005-05",
+      "title": "Broken Access Control \u2014 Payment Service",
+      "stride_category": "Elevation of Privilege",
+      "component": "Payment Service",
+      "description": "Insufficient authorisation checks in Payment Service allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.",
+      "attack_vector": "Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.",
+      "business_impact": "Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 \u2014 #1 OWASP risk.",
+      "likelihood": 2,
+      "impact": 5,
+      "risk_score": 40,
+      "severity": "Medium",
+      "mitigations": [
+        "Enforce authorisation checks server-side for every resource access \u2014 never trust client claims.",
+        "Implement RBAC/ABAC framework; deny by default.",
+        "Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.",
+        "Validate JWT signature and algorithm server-side; reject 'alg: none'.",
+        "Automated DAST scans for authorisation bypass in CI/CD."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1548",
+          "technique_name": "Abuse Elevation Control Mechanism",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1548/"
+        },
+        {
+          "technique_id": "T1134",
+          "technique_name": "Access Token Manipulation",
+          "tactic": "Privilege Escalation",
+          "url": "https://attack.mitre.org/techniques/T1134/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        },
+        {
+          "control_id": "AC-2",
+          "control_name": "Account Management",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T007-02",
+      "title": "Sensitive Data Exposure \u2014 Redis Cache",
+      "stride_category": "Information Disclosure",
+      "component": "Redis Cache",
+      "description": "Redis Cache stores credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.",
+      "attack_vector": "Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.",
+      "business_impact": "Credential exposure enables full account takeover and lateral movement across all systems using those credentials.",
+      "likelihood": 2,
+      "impact": 5,
+      "risk_score": 40,
+      "severity": "Medium",
+      "mitigations": [
+        "Encrypt PII at rest using AES-256; rotate encryption keys annually.",
+        "Implement field-level encryption for highly sensitive fields (SSN, payment data).",
+        "Apply data masking in non-production environments.",
+        "Enforce column-level access control \u2014 limit which roles can SELECT PII columns.",
+        "Audit all queries touching PII tables."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1213",
+          "technique_name": "Data from Information Repositories",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1213/"
+        },
+        {
+          "technique_id": "T1530",
+          "technique_name": "Data from Cloud Storage",
+          "tactic": "Collection",
+          "url": "https://attack.mitre.org/techniques/T1530/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        },
+        {
+          "category_id": "A01:2021",
+          "category_name": "Broken Access Control",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-28",
+          "control_name": "Protection of Information at Rest",
+          "family": "System and Comm"
+        },
+        {
+          "control_id": "AC-6",
+          "control_name": "Least Privilege",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "High",
+      "sprint_priority": 2
+    },
+    {
+      "id": "DF004-01",
+      "title": "Unencrypted Data Flow \u2014 Order Service \u2192 PostgreSQL Database",
+      "stride_category": "Information Disclosure",
+      "component": "Order Service \u2192 PostgreSQL Database",
+      "description": "Data flow 'Order Service to Database' transmits confidential data in plaintext over TCP. Network-positioned attacker can capture and read all traffic.",
+      "attack_vector": "Man-in-the-middle attack, network tap, ARP poisoning on internal segments.",
+      "business_impact": "Full plaintext exposure of all transmitted data. If confidential/restricted: immediate GDPR breach trigger. Credentials in transit = complete system compromise.",
+      "likelihood": 2,
+      "impact": 5,
+      "risk_score": 40,
+      "severity": "Medium",
+      "mitigations": [
+        "Upgrade TCP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.",
+        "Implement mutual TLS (mTLS) for service-to-service flows.",
+        "Disable HTTP fallback; HSTS with 1-year max-age."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1552",
+          "technique_name": "Unsecured Credentials",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1552/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-8",
+          "control_name": "Transmission Confidentiality and Integrity",
+          "family": "System and Comm"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T002-05",
+      "title": "Application-Layer DoS \u2014 API Gateway",
+      "stride_category": "Denial of Service",
+      "component": "API Gateway",
+      "description": "Attacker floods API Gateway with high-cost requests (complex queries, large uploads, expensive computations) causing resource exhaustion and service unavailability.",
+      "attack_vector": "HTTP flood, slow-loris, algorithmic complexity attacks, XML/JSON bombs.",
+      "business_impact": "Service outage. SLA breach \u2014 potential penalties. Revenue loss during downtime. Reputational damage to brand.",
+      "likelihood": 3,
+      "impact": 3,
+      "risk_score": 36,
+      "severity": "Medium",
+      "mitigations": [
+        "Implement rate limiting per IP and per authenticated user.",
+        "Set request size limits and connection timeouts.",
+        "Deploy CDN with DDoS protection (Cloudflare/AWS Shield) in front of service.",
+        "Implement circuit breakers for downstream dependencies."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1499",
+          "technique_name": "Endpoint Denial of Service",
+          "tactic": "Impact",
+          "url": "https://attack.mitre.org/techniques/T1499/"
+        },
+        {
+          "technique_id": "T1498",
+          "technique_name": "Network Denial of Service",
+          "tactic": "Impact",
+          "url": "https://attack.mitre.org/techniques/T1498/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A04:2021",
+          "category_name": "Insecure Design",
+          "year": 2021
+        },
+        {
+          "category_id": "A05:2021",
+          "category_name": "Security Misconfiguration",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "CP-10",
+          "control_name": "System Recovery and Reconstitution",
+          "family": "Contingency Planning"
+        },
+        {
+          "control_id": "AC-17",
+          "control_name": "Remote Access",
+          "family": "Access Control"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T006-04",
+      "title": "Database Query Exhaustion \u2014 PostgreSQL Database",
+      "stride_category": "Denial of Service",
+      "component": "PostgreSQL Database",
+      "description": "Unbounded queries or missing connection pooling limits cause PostgreSQL Database connection exhaustion, crashing the database and all dependent services.",
+      "attack_vector": "N+1 query loops, missing pagination, unrestricted JOIN depth.",
+      "business_impact": "Full application outage affecting all users. Data writes lost if in-flight transactions are rolled back. Recovery may take hours.",
+      "likelihood": 2,
+      "impact": 4,
+      "risk_score": 32,
+      "severity": "Medium",
+      "mitigations": [
+        "Enforce query timeout limits (e.g. 30s max).",
+        "Implement connection pooling (PgBouncer/HikariCP) with max pool size.",
+        "Add LIMIT clauses to all paginated queries \u2014 reject unbounded requests.",
+        "Monitor slow query log; alert on queries exceeding 5s."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1499",
+          "technique_name": "Endpoint Denial of Service",
+          "tactic": "Impact",
+          "url": "https://attack.mitre.org/techniques/T1499/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A04:2021",
+          "category_name": "Insecure Design",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "CP-10",
+          "control_name": "System Recovery and Reconstitution",
+          "family": "Contingency Planning"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Medium",
+      "sprint_priority": 2
+    },
+    {
+      "id": "T001-03",
+      "title": "Log Tampering / Evasion \u2014 Web App",
+      "stride_category": "Repudiation",
+      "component": "Web App",
+      "description": "Attacker with access to Web App clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.",
+      "attack_vector": "Elevated OS/DB access, log rotation exploit, direct log file write access.",
+      "business_impact": "Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).",
+      "likelihood": 2,
+      "impact": 3,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Forward logs to immutable remote SIEM immediately \u2014 local logs are secondary.",
+        "Restrict log file write permissions to logging daemon only.",
+        "Alert on log gaps, rotation anomalies, or log volume drops."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "T001-04",
+      "title": "Error Message Information Leakage \u2014 Web App",
+      "stride_category": "Information Disclosure",
+      "component": "Web App",
+      "description": "Verbose error messages from Web App expose stack traces, internal paths, framework versions, or database query details to unauthenticated users.",
+      "attack_vector": "Intentional malformed requests; crawler collection of public error pages.",
+      "business_impact": "Aids attacker reconnaissance \u2014 reduces time-to-exploit by revealing exact technology versions with known CVEs.",
+      "likelihood": 3,
+      "impact": 2,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Return generic error messages to clients; log verbose errors server-side only.",
+        "Implement global exception handler returning RFC 7807 Problem Details format.",
+        "Remove server/framework headers (X-Powered-By, Server)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1595",
+          "technique_name": "Active Scanning",
+          "tactic": "Reconnaissance",
+          "url": "https://attack.mitre.org/techniques/T1595/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A05:2021",
+          "category_name": "Security Misconfiguration",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SI-10",
+          "control_name": "Information Input Validation",
+          "family": "System Integrity"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "T002-03",
+      "title": "Log Tampering / Evasion \u2014 API Gateway",
+      "stride_category": "Repudiation",
+      "component": "API Gateway",
+      "description": "Attacker with access to API Gateway clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.",
+      "attack_vector": "Elevated OS/DB access, log rotation exploit, direct log file write access.",
+      "business_impact": "Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).",
+      "likelihood": 2,
+      "impact": 3,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Forward logs to immutable remote SIEM immediately \u2014 local logs are secondary.",
+        "Restrict log file write permissions to logging daemon only.",
+        "Alert on log gaps, rotation anomalies, or log volume drops."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "T002-04",
+      "title": "Error Message Information Leakage \u2014 API Gateway",
+      "stride_category": "Information Disclosure",
+      "component": "API Gateway",
+      "description": "Verbose error messages from API Gateway expose stack traces, internal paths, framework versions, or database query details to unauthenticated users.",
+      "attack_vector": "Intentional malformed requests; crawler collection of public error pages.",
+      "business_impact": "Aids attacker reconnaissance \u2014 reduces time-to-exploit by revealing exact technology versions with known CVEs.",
+      "likelihood": 3,
+      "impact": 2,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Return generic error messages to clients; log verbose errors server-side only.",
+        "Implement global exception handler returning RFC 7807 Problem Details format.",
+        "Remove server/framework headers (X-Powered-By, Server)."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1595",
+          "technique_name": "Active Scanning",
+          "tactic": "Reconnaissance",
+          "url": "https://attack.mitre.org/techniques/T1595/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A05:2021",
+          "category_name": "Security Misconfiguration",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SI-10",
+          "control_name": "Information Input Validation",
+          "family": "System Integrity"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "T003-02",
+      "title": "Log Tampering / Evasion \u2014 Auth Service",
+      "stride_category": "Repudiation",
+      "component": "Auth Service",
+      "description": "Attacker with access to Auth Service clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.",
+      "attack_vector": "Elevated OS/DB access, log rotation exploit, direct log file write access.",
+      "business_impact": "Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).",
+      "likelihood": 2,
+      "impact": 3,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Forward logs to immutable remote SIEM immediately \u2014 local logs are secondary.",
+        "Restrict log file write permissions to logging daemon only.",
+        "Alert on log gaps, rotation anomalies, or log volume drops."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "T004-03",
+      "title": "Log Tampering / Evasion \u2014 Order Service",
+      "stride_category": "Repudiation",
+      "component": "Order Service",
+      "description": "Attacker with access to Order Service clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.",
+      "attack_vector": "Elevated OS/DB access, log rotation exploit, direct log file write access.",
+      "business_impact": "Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).",
+      "likelihood": 2,
+      "impact": 3,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Forward logs to immutable remote SIEM immediately \u2014 local logs are secondary.",
+        "Restrict log file write permissions to logging daemon only.",
+        "Alert on log gaps, rotation anomalies, or log volume drops."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "T005-03",
+      "title": "Log Tampering / Evasion \u2014 Payment Service",
+      "stride_category": "Repudiation",
+      "component": "Payment Service",
+      "description": "Attacker with access to Payment Service clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.",
+      "attack_vector": "Elevated OS/DB access, log rotation exploit, direct log file write access.",
+      "business_impact": "Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).",
+      "likelihood": 2,
+      "impact": 3,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Forward logs to immutable remote SIEM immediately \u2014 local logs are secondary.",
+        "Restrict log file write permissions to logging daemon only.",
+        "Alert on log gaps, rotation anomalies, or log volume drops."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1070",
+          "technique_name": "Indicator Removal",
+          "tactic": "Defense Evasion",
+          "url": "https://attack.mitre.org/techniques/T1070/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A09:2021",
+          "category_name": "Security Logging and Monitoring Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "AU-9",
+          "control_name": "Protection of Audit Information",
+          "family": "Audit and Accountability"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    },
+    {
+      "id": "DF005-01",
+      "title": "Unencrypted Data Flow \u2014 Auth Service \u2192 Redis Cache",
+      "stride_category": "Information Disclosure",
+      "component": "Auth Service \u2192 Redis Cache",
+      "description": "Data flow 'Auth Service to Redis' transmits internal data in plaintext over TCP. Network-positioned attacker can capture and read all traffic.",
+      "attack_vector": "Man-in-the-middle attack, network tap, ARP poisoning on internal segments.",
+      "business_impact": "Full plaintext exposure of all transmitted data. If confidential/restricted: immediate GDPR breach trigger. Credentials in transit = complete system compromise.",
+      "likelihood": 2,
+      "impact": 3,
+      "risk_score": 24,
+      "severity": "Low",
+      "mitigations": [
+        "Upgrade TCP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.",
+        "Implement mutual TLS (mTLS) for service-to-service flows.",
+        "Disable HTTP fallback; HSTS with 1-year max-age."
+      ],
+      "mitre_mappings": [
+        {
+          "technique_id": "T1552",
+          "technique_name": "Unsecured Credentials",
+          "tactic": "Credential Access",
+          "url": "https://attack.mitre.org/techniques/T1552/"
+        }
+      ],
+      "owasp_mappings": [
+        {
+          "category_id": "A02:2021",
+          "category_name": "Cryptographic Failures",
+          "year": 2021
+        }
+      ],
+      "nist_controls": [
+        {
+          "control_id": "SC-8",
+          "control_name": "Transmission Confidentiality and Integrity",
+          "family": "System and Comm"
+        }
+      ],
+      "llm_narrative": "",
+      "remediation_effort": "Low",
+      "sprint_priority": 3
+    }
+  ],
+  "compliance_flags": [
+    {
+      "framework": "GDPR",
+      "requirement": "Art. 32 \u2014 Security of Processing",
+      "threat_ids": [
+        "T001-01",
+        "T001-02",
+        "T001-06",
+        "T002-01",
+        "T002-02",
+        "T002-06",
+        "T003-01",
+        "T003-03",
+        "T004-01",
+        "T004-02",
+        "T004-04",
+        "T005-01",
+        "T005-02",
+        "T005-04",
+        "T006-01",
+        "T006-03",
+        "DF003-01"
+      ],
+      "description": "GDPR requires appropriate technical measures to protect personal data. Critical/High threats against systems processing personal data require immediate remediation."
+    },
+    {
+      "framework": "PCI-DSS",
+      "requirement": "PCI-DSS v4.0 Req. 6 \u2014 Develop and Maintain Secure Systems",
+      "threat_ids": [
+        "T001-01",
+        "T001-02",
+        "T001-06",
+        "T002-01",
+        "T002-02",
+        "T002-06",
+        "T003-01",
+        "T003-03",
+        "T004-01",
+        "T004-02",
+        "T004-04",
+        "T005-01",
+        "T005-02",
+        "T005-04",
+        "T006-01",
+        "T006-03",
+        "DF003-01"
+      ],
+      "description": "PCI-DSS requires all Critical/High vulnerabilities to be remediated within 1 month."
+    }
+  ],
+  "overall_risk_score": 100.0,
+  "generated_at": "2026-06-28 11:04:31",
+  "analyst": "P2 Threat Model Generator"
+}

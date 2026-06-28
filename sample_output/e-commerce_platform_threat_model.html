@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Model — E-Commerce Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0d; --bg2: #141414; --bg3: #1a1a1a;
+    --text1: #f0f0f0; --text2: #b0b0b0; --text3: #666;
+    --accent: #00ffb2; --border: #222; --font: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text1); font-family: var(--font); font-size: 14px; line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #0a1a15 0%, #0d0d0d 60%); border-bottom: 1px solid var(--border); padding: 40px 48px; }
+  .report-header .label { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .report-header h1 { font-size: 32px; font-weight: 700; margin-bottom: 4px; }
+  .report-header .meta { color: var(--text3); font-size: 13px; margin-top: 8px; }
+  .report-header .meta strong { color: var(--text2); }
+
+  /* Overall risk */
+  .risk-hero { display: flex; align-items: center; gap: 24px; margin-top: 24px; padding: 20px 24px; background: var(--bg3); border-radius: 12px; border: 1px solid var(--border); max-width: 480px; }
+  .risk-score-big { font-size: 56px; font-weight: 800; line-height: 1; }
+  .risk-label { font-size: 11px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text3); margin-top: 4px; }
+  .risk-status { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+
+  /* Summary cards */
+  .summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 32px 48px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+  .sum-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+  .sum-card .val { font-size: 36px; font-weight: 800; }
+  .sum-card .lbl { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+  /* Sections */
+  .section { padding: 40px 48px; border-bottom: 1px solid var(--border); }
+  .section-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; color: var(--text1); }
+
+  /* Charts */
+  .charts-grid { display: grid; grid-template-columns: 260px 1fr 1fr; gap: 24px; }
+  .chart-box { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .chart-box h3 { font-size: 13px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  .chart-box canvas { height: 200px !important; }
+
+  /* Threat cards */
+  .threat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 16px; }
+  .threat-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .threat-id { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-right: 10px; }
+  .threat-title { font-size: 16px; font-weight: 600; }
+  .threat-meta { font-size: 12px; color: var(--text3); margin-bottom: 10px; }
+  .threat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
+
+  /* Risk bar */
+  .risk-bar-wrap { background: #1e1e1e; border-radius: 4px; height: 6px; position: relative; margin: 8px 0 16px; }
+  .risk-bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+  .risk-bar-label { position: absolute; right: 0; top: -18px; font-size: 11px; color: #888; font-family: var(--mono); }
+
+  /* Badges */
+  .sev-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-family: var(--mono); letter-spacing: .5px; }
+  .stride-chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid; background: transparent; }
+  .sprint-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: #fff; letter-spacing: .5px; font-family: var(--mono); }
+  .effort-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+  .effort-low { background: #0a2a0a; color: #44bb44; border: 1px solid #44bb44; }
+  .effort-medium { background: #2a2200; color: #ffcc00; border: 1px solid #ffcc00; }
+  .effort-high { background: #2a0a0a; color: #ff4444; border: 1px solid #ff4444; }
+  .fw-badge { background: #1a1a2e; color: #a78bfa; border: 1px solid #a78bfa; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+
+  /* Fields */
+  .field-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text3); margin-bottom: 6px; }
+  .field-val { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .impact-text { color: #ffb347; font-size: 13px; }
+  .mitigation-list { list-style: none; padding: 0; }
+  .mitigation-list li { font-size: 12px; color: #aaa; padding: 3px 0 3px 16px; position: relative; line-height: 1.5; }
+  .mitigation-list li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+
+  /* MITRE */
+  .mitre-link { background: #0a1e14; border: 1px solid #00ffb240; color: var(--accent); padding: 1px 7px; border-radius: 4px; font-family: var(--mono); font-size: 11px; }
+  .mitre-link:hover { background: #00ffb220; }
+
+  /* LLM narrative */
+  .llm-narrative { margin-top: 16px; padding: 14px 16px; background: #0f1f18; border: 1px solid #00ffb230; border-radius: 8px; font-size: 13px; color: #b0c9be; line-height: 1.7; font-style: italic; }
+
+  /* Sprint table */
+  .threat-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .threat-table th { text-align: left; padding: 10px 12px; background: var(--bg3); color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+  .threat-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text2); }
+  .threat-table tr:hover td { background: var(--bg3); }
+
+  /* Exec summary */
+  .exec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .exec-box { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .exec-box h3 { font-size: 13px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+  /* Footer */
+  .report-footer { padding: 24px 48px; color: var(--text3); font-size: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; }
+
+  @media (max-width: 900px) {
+    .summary-cards { grid-template-columns: repeat(2,1fr); }
+    .charts-grid { grid-template-columns: 1fr; }
+    .threat-grid { grid-template-columns: 1fr; }
+    .exec-grid { grid-template-columns: 1fr; }
+    .section { padding: 24px 20px; }
+    .report-header { padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="report-header">
+  <div class="label">// threat model report</div>
+  <h1>E-Commerce Platform</h1>
+  <div class="meta">
+    <strong>Version:</strong> 2.1.0 &nbsp;·&nbsp;
+    <strong>Environment:</strong> Production &nbsp;·&nbsp;
+    <strong>Owner:</strong> Platform Security Team &nbsp;·&nbsp;
+    <strong>Generated:</strong> 2026-06-28 11:04:31 &nbsp;·&nbsp;
+    <strong>Analyst:</strong> P2 Threat Model Generator
+  </div>
+  <div class="meta" style="margin-top:6px">
+    <strong>Data Classification:</strong> Confidential &nbsp;·&nbsp;
+    <strong>Internet-Facing:</strong> Yes &nbsp;·&nbsp;
+    <strong>Compliance:</strong> GDPR, PCI_DSS
+  </div>
+  <div class="risk-hero">
+    <div>
+      <div class="risk-score-big" style="color:#ff4444">100</div>
+      <div class="risk-label">Overall Risk Score / 100</div>
+    </div>
+    <div>
+      <div class="risk-status" style="color:#ff4444">CRITICAL RISK</div>
+      <div style="color:var(--text3);font-size:12px">35 threats identified across 7 component(s)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SUMMARY CARDS ── -->
+<div class="summary-cards">
+  <div class="sum-card"><div class="val" style="color:#ff4444">2</div><div class="lbl">Critical</div></div>
+  <div class="sum-card"><div class="val" style="color:#ff8800">15</div><div class="lbl">High</div></div>
+  <div class="sum-card"><div class="val" style="color:#ffcc00">10</div><div class="lbl">Medium</div></div>
+  <div class="sum-card"><div class="val" style="color:#44bb44">8</div><div class="lbl">Low / Info</div></div>
+</div>
+
+<!-- ── CHARTS ── -->
+<section class="section">
+  <h2 class="section-title">📊 Risk Overview</h2>
+  <div class="charts-grid">
+    <div class="chart-box">
+      <h3>STRIDE Distribution</h3>
+      <canvas id="strideChart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Severity Breakdown</h3>
+      <canvas id="sevChart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Top 5 Threats by Risk Score</h3>
+      <canvas id="top5Chart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ── EXECUTIVE SUMMARY ── -->
+<section class="section" style="background:var(--bg2)">
+  <h2 class="section-title">📋 Executive Summary</h2>
+  <div class="exec-grid">
+    <div class="exec-box">
+      <h3>Key Findings</h3>
+      <p style="color:var(--text2);font-size:13px;line-height:1.7">
+        Threat model analysis of <strong>E-Commerce Platform</strong> identified <strong>35 threats</strong>
+        across 7 system component(s).
+        <span style="color:#ff4444"><strong>2 Critical threat(s)</strong></span> require immediate remediation before any production deployment or release. 
+        <span style="color:#ff8800"><strong>15 High threat(s)</strong></span> must be resolved within the current sprint. 
+        The overall application risk score is <strong style="color:#ff4444">100/100 (CRITICAL)</strong>.
+      </p>
+    </div>
+    <div class="exec-box">
+      <h3>Top 3 Business Risks</h3>
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600;color:var(--text1)">Injection Attack — Web App</div><div style="font-size:12px;color:#ffb347;margin-top:3px">Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).</div></div><div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600;color:var(--text1)">Injection Attack — API Gateway</div><div style="font-size:12px;color:#ffb347;margin-top:3px">Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).</div></div><div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600;color:var(--text1)">Identity Spoofing — Web App</div><div style="font-size:12px;color:#ffb347;margin-top:3px">Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and re…</div></div>
+    </div>
+    <div class="exec-box">
+      <h3>Remediation Timeline</h3>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8">
+        🔴 <strong>Immediate (Sprint 1):</strong> 17 threat(s)<br>
+        🟡 <strong>This Quarter:</strong> 10 threat(s)<br>
+        🟢 <strong>Backlog:</strong> 8 threat(s)
+      </div>
+    </div>
+    <div class="exec-box">
+      <h3>STRIDE Coverage</h3>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#ff6b9d">Spoofing</span><span style="color:var(--text2)">5 threat(s)</span></div><div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#ff8800">Tampering</span><span style="color:var(--text2)">5 threat(s)</span></div><div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#a78bfa">Repudiation</span><span style="color:var(--text2)">7 threat(s)</span></div><div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#38bdf8">Information Disclosure</span><span style="color:var(--text2)">10 threat(s)</span></div><div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#fb7185">Denial of Service</span><span style="color:var(--text2)">3 threat(s)</span></div><div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#34d399">Elevation of Privilege</span><span style="color:var(--text2)">5 threat(s)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SPRINT 1 TABLE ── -->
+<section class="section">
+  <h2 class="section-title">🔴 Immediate Remediation — Sprint 1 (17 items)</h2>
+  <table class="threat-table">
+    <thead><tr><th>ID</th><th>Threat</th><th>Component</th><th>Severity</th><th>Effort</th><th>First Mitigation</th></tr></thead>
+    <tbody>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T001-02</td>
+            <td>Injection Attack — Web App</td>
+            <td>Web App</td>
+            <td><span class="sev-badge" style="color:#ff4444;background:#2a0a0a;border:1px solid #ff4444">Critical</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Parameterise all database queries — never concatenate user input.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T002-02</td>
+            <td>Injection Attack — API Gateway</td>
+            <td>API Gateway</td>
+            <td><span class="sev-badge" style="color:#ff4444;background:#2a0a0a;border:1px solid #ff4444">Critical</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Parameterise all database queries — never concatenate user input.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T001-01</td>
+            <td>Identity Spoofing — Web App</td>
+            <td>Web App</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce MFA on all user-facing authentication flows.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T002-01</td>
+            <td>Identity Spoofing — API Gateway</td>
+            <td>API Gateway</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce MFA on all user-facing authentication flows.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T001-06</td>
+            <td>Broken Access Control — Web App</td>
+            <td>Web App</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-high">High</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce authorisation checks server-side for every resource access — never trust client claims.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T002-06</td>
+            <td>Broken Access Control — API Gateway</td>
+            <td>API Gateway</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-high">High</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce authorisation checks server-side for every resource access — never trust client claims.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T003-01</td>
+            <td>Identity Spoofing — Auth Service</td>
+            <td>Auth Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce MFA on all user-facing authentication flows.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T003-03</td>
+            <td>Sensitive Data Exposure — Auth Service</td>
+            <td>Auth Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-high">High</span></td>
+            <td style="font-size:12px;color:#aaa">Encrypt PII at rest using AES-256; rotate encryption keys annually.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T004-01</td>
+            <td>Identity Spoofing — Order Service</td>
+            <td>Order Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce MFA on all user-facing authentication flows.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T004-02</td>
+            <td>Injection Attack — Order Service</td>
+            <td>Order Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Parameterise all database queries — never concatenate user input.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T004-04</td>
+            <td>Sensitive Data Exposure — Order Service</td>
+            <td>Order Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-high">High</span></td>
+            <td style="font-size:12px;color:#aaa">Encrypt PII at rest using AES-256; rotate encryption keys annually.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T005-01</td>
+            <td>Identity Spoofing — Payment Service</td>
+            <td>Payment Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Enforce MFA on all user-facing authentication flows.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T005-02</td>
+            <td>Injection Attack — Payment Service</td>
+            <td>Payment Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Parameterise all database queries — never concatenate user input.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T005-04</td>
+            <td>Sensitive Data Exposure — Payment Service</td>
+            <td>Payment Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-high">High</span></td>
+            <td style="font-size:12px;color:#aaa">Encrypt PII at rest using AES-256; rotate encryption keys annually.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T006-01</td>
+            <td>Data Tampering — PostgreSQL Database</td>
+            <td>PostgreSQL Database</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-medium">Medium</span></td>
+            <td style="font-size:12px;color:#aaa">Apply least-privilege — app service account: SELECT/INSERT/UPDATE only, no DDL/DROP.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">T006-03</td>
+            <td>Sensitive Data Exposure — PostgreSQL Database</td>
+            <td>PostgreSQL Database</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-high">High</span></td>
+            <td style="font-size:12px;color:#aaa">Encrypt PII at rest using AES-256; rotate encryption keys annually.</td>
+        </tr>
+        <tr>
+            <td style="font-family:monospace;color:#888;font-size:12px">DF003-01</td>
+            <td>Unencrypted Data Flow — API Gateway → Order Service</td>
+            <td>API Gateway → Order Service</td>
+            <td><span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span></td>
+            <td><span class="effort-badge effort-low">Low</span></td>
+            <td style="font-size:12px;color:#aaa">Upgrade HTTP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.</td>
+        </tr></tbody>
+  </table>
+</section>
+
+<!-- ── COMPLIANCE ── -->
+
+        <section class="section">
+            <h2 class="section-title">⚖️ Compliance Exposure</h2>
+            <table class="threat-table">
+                <thead><tr><th>Framework</th><th>Requirement</th><th>Description</th><th>Affected</th></tr></thead>
+                <tbody>
+            <tr>
+                <td><span class="fw-badge">GDPR</span></td>
+                <td>Art. 32 — Security of Processing</td>
+                <td>GDPR requires appropriate technical measures to protect personal data. Critical/High threats against systems processing personal data require immediate remediation.</td>
+                <td>17 threat(s)</td>
+            </tr>
+            <tr>
+                <td><span class="fw-badge">PCI-DSS</span></td>
+                <td>PCI-DSS v4.0 Req. 6 — Develop and Maintain Secure Systems</td>
+                <td>PCI-DSS requires all Critical/High vulnerabilities to be remediated within 1 month.</td>
+                <td>17 threat(s)</td>
+            </tr></tbody>
+            </table>
+        </section>
+
+<!-- ── ALL THREATS ── -->
+<section class="section">
+  <h2 class="section-title">🛡️ Full Threat Inventory (35 threats)</h2>
+  
+        <div class="threat-card" style="border-left:3px solid #ff4444">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T001-02</span>
+                    <span class="threat-title">Injection Attack — Web App</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff4444;background:#2a0a0a;border:1px solid #ff4444">Critical</span>
+                    <span class="stride-chip" style="color:#ff8800;border-color:#ff8800">Tampering</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Web App</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff4444">80/100</strong> &nbsp;|&nbsp; Likelihood: 4/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:80%;background:#ff4444"></div><span class="risk-bar-label">80</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Malicious input reaches Web App without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Parameterise all database queries — never concatenate user input.</li><li>Implement strict input validation and allowlisting at every entry point.</li><li>Deploy WAF rules for SQLi, XSS, command injection patterns.</li><li>Use Content Security Policy headers to mitigate XSS impact.</li><li>Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1190/" target="_blank" class="mitre-link">T1190</a> <a href="https://attack.mitre.org/techniques/T1059/" target="_blank" class="mitre-link">T1059</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A03:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SI-10, SA-11</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff4444">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T002-02</span>
+                    <span class="threat-title">Injection Attack — API Gateway</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff4444;background:#2a0a0a;border:1px solid #ff4444">Critical</span>
+                    <span class="stride-chip" style="color:#ff8800;border-color:#ff8800">Tampering</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff4444">80/100</strong> &nbsp;|&nbsp; Likelihood: 4/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:80%;background:#ff4444"></div><span class="risk-bar-label">80</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Malicious input reaches API Gateway without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Parameterise all database queries — never concatenate user input.</li><li>Implement strict input validation and allowlisting at every entry point.</li><li>Deploy WAF rules for SQLi, XSS, command injection patterns.</li><li>Use Content Security Policy headers to mitigate XSS impact.</li><li>Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1190/" target="_blank" class="mitre-link">T1190</a> <a href="https://attack.mitre.org/techniques/T1059/" target="_blank" class="mitre-link">T1059</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A03:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SI-10, SA-11</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T001-01</span>
+                    <span class="threat-title">Identity Spoofing — Web App</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff6b9d;border-color:#ff6b9d">Spoofing</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Web App</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">64/100</strong> &nbsp;|&nbsp; Likelihood: 4/5 &nbsp;|&nbsp; Impact: 4/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:64%;background:#ff8800"></div><span class="risk-bar-label">64</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker impersonates a legitimate user or service accessing Web App via credential theft, session hijacking, or weak authentication bypass.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Credential stuffing, brute-force, stolen session tokens, OAuth token replay.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce MFA on all user-facing authentication flows.</li><li>Implement account lockout after 5 failed attempts.</li><li>Use short-lived JWTs with refresh token rotation.</li><li>Monitor for credential stuffing patterns (IP velocity, geo-anomalies).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1110/" target="_blank" class="mitre-link">T1110</a> <a href="https://attack.mitre.org/techniques/T1539/" target="_blank" class="mitre-link">T1539</a> <a href="https://attack.mitre.org/techniques/T1078/" target="_blank" class="mitre-link">T1078</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A07:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">IA-2, IA-5, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T002-01</span>
+                    <span class="threat-title">Identity Spoofing — API Gateway</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff6b9d;border-color:#ff6b9d">Spoofing</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">64/100</strong> &nbsp;|&nbsp; Likelihood: 4/5 &nbsp;|&nbsp; Impact: 4/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:64%;background:#ff8800"></div><span class="risk-bar-label">64</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker impersonates a legitimate user or service accessing API Gateway via credential theft, session hijacking, or weak authentication bypass.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Credential stuffing, brute-force, stolen session tokens, OAuth token replay.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce MFA on all user-facing authentication flows.</li><li>Implement account lockout after 5 failed attempts.</li><li>Use short-lived JWTs with refresh token rotation.</li><li>Monitor for credential stuffing patterns (IP velocity, geo-anomalies).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1110/" target="_blank" class="mitre-link">T1110</a> <a href="https://attack.mitre.org/techniques/T1539/" target="_blank" class="mitre-link">T1539</a> <a href="https://attack.mitre.org/techniques/T1078/" target="_blank" class="mitre-link">T1078</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A07:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">IA-2, IA-5, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T001-06</span>
+                    <span class="threat-title">Broken Access Control — Web App</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#34d399;border-color:#34d399">Elevation of Privilege</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Web App</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Insufficient authorisation checks in Web App allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 — #1 OWASP risk.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce authorisation checks server-side for every resource access — never trust client claims.</li><li>Implement RBAC/ABAC framework; deny by default.</li><li>Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.</li><li>Validate JWT signature and algorithm server-side; reject 'alg: none'.</li><li>Automated DAST scans for authorisation bypass in CI/CD.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1548/" target="_blank" class="mitre-link">T1548</a> <a href="https://attack.mitre.org/techniques/T1134/" target="_blank" class="mitre-link">T1134</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AC-6, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T002-06</span>
+                    <span class="threat-title">Broken Access Control — API Gateway</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#34d399;border-color:#34d399">Elevation of Privilege</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Insufficient authorisation checks in API Gateway allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 — #1 OWASP risk.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce authorisation checks server-side for every resource access — never trust client claims.</li><li>Implement RBAC/ABAC framework; deny by default.</li><li>Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.</li><li>Validate JWT signature and algorithm server-side; reject 'alg: none'.</li><li>Automated DAST scans for authorisation bypass in CI/CD.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1548/" target="_blank" class="mitre-link">T1548</a> <a href="https://attack.mitre.org/techniques/T1134/" target="_blank" class="mitre-link">T1134</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AC-6, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T003-01</span>
+                    <span class="threat-title">Identity Spoofing — Auth Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff6b9d;border-color:#ff6b9d">Spoofing</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Auth Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker impersonates a legitimate user or service accessing Auth Service via credential theft, session hijacking, or weak authentication bypass.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Credential stuffing, brute-force, stolen session tokens, OAuth token replay.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce MFA on all user-facing authentication flows.</li><li>Implement account lockout after 5 failed attempts.</li><li>Use short-lived JWTs with refresh token rotation.</li><li>Monitor for credential stuffing patterns (IP velocity, geo-anomalies).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1110/" target="_blank" class="mitre-link">T1110</a> <a href="https://attack.mitre.org/techniques/T1539/" target="_blank" class="mitre-link">T1539</a> <a href="https://attack.mitre.org/techniques/T1078/" target="_blank" class="mitre-link">T1078</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A07:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">IA-2, IA-5, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T003-03</span>
+                    <span class="threat-title">Sensitive Data Exposure — Auth Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Auth Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Auth Service stores PII and/or credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">GDPR breach notification required within 72 hours. Fines up to €20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Encrypt PII at rest using AES-256; rotate encryption keys annually.</li><li>Implement field-level encryption for highly sensitive fields (SSN, payment data).</li><li>Apply data masking in non-production environments.</li><li>Enforce column-level access control — limit which roles can SELECT PII columns.</li><li>Audit all queries touching PII tables.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1213/" target="_blank" class="mitre-link">T1213</a> <a href="https://attack.mitre.org/techniques/T1530/" target="_blank" class="mitre-link">T1530</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021, A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-28, AC-6</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T004-01</span>
+                    <span class="threat-title">Identity Spoofing — Order Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff6b9d;border-color:#ff6b9d">Spoofing</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Order Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker impersonates a legitimate user or service accessing Order Service via credential theft, session hijacking, or weak authentication bypass.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Credential stuffing, brute-force, stolen session tokens, OAuth token replay.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce MFA on all user-facing authentication flows.</li><li>Implement account lockout after 5 failed attempts.</li><li>Use short-lived JWTs with refresh token rotation.</li><li>Monitor for credential stuffing patterns (IP velocity, geo-anomalies).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1110/" target="_blank" class="mitre-link">T1110</a> <a href="https://attack.mitre.org/techniques/T1539/" target="_blank" class="mitre-link">T1539</a> <a href="https://attack.mitre.org/techniques/T1078/" target="_blank" class="mitre-link">T1078</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A07:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">IA-2, IA-5, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T004-02</span>
+                    <span class="threat-title">Injection Attack — Order Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff8800;border-color:#ff8800">Tampering</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Order Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Malicious input reaches Order Service without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Parameterise all database queries — never concatenate user input.</li><li>Implement strict input validation and allowlisting at every entry point.</li><li>Deploy WAF rules for SQLi, XSS, command injection patterns.</li><li>Use Content Security Policy headers to mitigate XSS impact.</li><li>Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1190/" target="_blank" class="mitre-link">T1190</a> <a href="https://attack.mitre.org/techniques/T1059/" target="_blank" class="mitre-link">T1059</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A03:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SI-10, SA-11</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T004-04</span>
+                    <span class="threat-title">Sensitive Data Exposure — Order Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Order Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Order Service stores PII. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">GDPR breach notification required within 72 hours. Fines up to €20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Encrypt PII at rest using AES-256; rotate encryption keys annually.</li><li>Implement field-level encryption for highly sensitive fields (SSN, payment data).</li><li>Apply data masking in non-production environments.</li><li>Enforce column-level access control — limit which roles can SELECT PII columns.</li><li>Audit all queries touching PII tables.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1213/" target="_blank" class="mitre-link">T1213</a> <a href="https://attack.mitre.org/techniques/T1530/" target="_blank" class="mitre-link">T1530</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021, A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-28, AC-6</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T005-01</span>
+                    <span class="threat-title">Identity Spoofing — Payment Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff6b9d;border-color:#ff6b9d">Spoofing</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Payment Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker impersonates a legitimate user or service accessing Payment Service via credential theft, session hijacking, or weak authentication bypass.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Credential stuffing, brute-force, stolen session tokens, OAuth token replay.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Unauthorised access to customer accounts or internal systems. Potential for data theft, fraudulent transactions, reputational damage, and regulatory liability under GDPR/PCI-DSS.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce MFA on all user-facing authentication flows.</li><li>Implement account lockout after 5 failed attempts.</li><li>Use short-lived JWTs with refresh token rotation.</li><li>Monitor for credential stuffing patterns (IP velocity, geo-anomalies).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1110/" target="_blank" class="mitre-link">T1110</a> <a href="https://attack.mitre.org/techniques/T1539/" target="_blank" class="mitre-link">T1539</a> <a href="https://attack.mitre.org/techniques/T1078/" target="_blank" class="mitre-link">T1078</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A07:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">IA-2, IA-5, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T005-02</span>
+                    <span class="threat-title">Injection Attack — Payment Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff8800;border-color:#ff8800">Tampering</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Payment Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Malicious input reaches Payment Service without proper validation or parameterisation, enabling SQL injection, command injection, or XSS.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Crafted HTTP requests targeting form fields, query params, JSON bodies, headers.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Complete database exfiltration, remote code execution, customer data theft. SQLi breaches average $3.86M (IBM Cost of a Data Breach).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Parameterise all database queries — never concatenate user input.</li><li>Implement strict input validation and allowlisting at every entry point.</li><li>Deploy WAF rules for SQLi, XSS, command injection patterns.</li><li>Use Content Security Policy headers to mitigate XSS impact.</li><li>Run SAST (Semgrep/Bandit) and DAST (ZAP) in CI pipeline.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1190/" target="_blank" class="mitre-link">T1190</a> <a href="https://attack.mitre.org/techniques/T1059/" target="_blank" class="mitre-link">T1059</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A03:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SI-10, SA-11</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T005-04</span>
+                    <span class="threat-title">Sensitive Data Exposure — Payment Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Payment Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Payment Service stores PII and/or credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">GDPR breach notification required within 72 hours. Fines up to €20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Encrypt PII at rest using AES-256; rotate encryption keys annually.</li><li>Implement field-level encryption for highly sensitive fields (SSN, payment data).</li><li>Apply data masking in non-production environments.</li><li>Enforce column-level access control — limit which roles can SELECT PII columns.</li><li>Audit all queries touching PII tables.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1213/" target="_blank" class="mitre-link">T1213</a> <a href="https://attack.mitre.org/techniques/T1530/" target="_blank" class="mitre-link">T1530</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021, A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-28, AC-6</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T006-01</span>
+                    <span class="threat-title">Data Tampering — PostgreSQL Database</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#ff8800;border-color:#ff8800">Tampering</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>PostgreSQL Database</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker with excessive DB privileges or via SQLi modifies records in PostgreSQL Database, corrupting financial data, audit trails, or application state.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Overprivileged service accounts, SQLi through upstream app, insider access.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Data integrity loss. Corrupted financial records trigger compliance audit failures. Reverting tampered data requires costly forensic investigation.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Apply least-privilege — app service account: SELECT/INSERT/UPDATE only, no DDL/DROP.</li><li>Enable database audit logging for all DDL and bulk operations.</li><li>Implement row-level checksums or audit tables for sensitive records.</li><li>Restrict direct DB access to DB admins via PAM jump server.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1565/" target="_blank" class="mitre-link">T1565</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A01:2021, A04:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AC-6, AU-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T006-03</span>
+                    <span class="threat-title">Sensitive Data Exposure — PostgreSQL Database</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>PostgreSQL Database</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">PostgreSQL Database stores PII and/or credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">GDPR breach notification required within 72 hours. Fines up to €20M or 4% of global turnover. Class action risk. Average PII breach cost: $4.45M (IBM 2023).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Encrypt PII at rest using AES-256; rotate encryption keys annually.</li><li>Implement field-level encryption for highly sensitive fields (SSN, payment data).</li><li>Apply data masking in non-production environments.</li><li>Enforce column-level access control — limit which roles can SELECT PII columns.</li><li>Audit all queries touching PII tables.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1213/" target="_blank" class="mitre-link">T1213</a> <a href="https://attack.mitre.org/techniques/T1530/" target="_blank" class="mitre-link">T1530</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021, A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-28, AC-6</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ff8800">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">DF003-01</span>
+                    <span class="threat-title">Unencrypted Data Flow — API Gateway → Order Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ff8800;background:#2a1500;border:1px solid #ff8800">High</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff4444">SPRINT 1</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway → Order Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ff8800">60/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:60%;background:#ff8800"></div><span class="risk-bar-label">60</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Data flow 'API Gateway to Order Service' transmits confidential data in plaintext over HTTP. Network-positioned attacker can capture and read all traffic.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Man-in-the-middle attack, network tap, ARP poisoning on internal segments.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Full plaintext exposure of all transmitted data. If confidential/restricted: immediate GDPR breach trigger. Credentials in transit = complete system compromise.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Upgrade HTTP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.</li><li>Implement mutual TLS (mTLS) for service-to-service flows.</li><li>Disable HTTP fallback; HSTS with 1-year max-age.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1552/" target="_blank" class="mitre-link">T1552</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-8</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T001-05</span>
+                    <span class="threat-title">Application-Layer DoS — Web App</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#fb7185;border-color:#fb7185">Denial of Service</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Web App</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">48/100</strong> &nbsp;|&nbsp; Likelihood: 4/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:48%;background:#ffcc00"></div><span class="risk-bar-label">48</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker floods Web App with high-cost requests (complex queries, large uploads, expensive computations) causing resource exhaustion and service unavailability.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">HTTP flood, slow-loris, algorithmic complexity attacks, XML/JSON bombs.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Service outage. SLA breach — potential penalties. Revenue loss during downtime. Reputational damage to brand.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Implement rate limiting per IP and per authenticated user.</li><li>Set request size limits and connection timeouts.</li><li>Deploy CDN with DDoS protection (Cloudflare/AWS Shield) in front of service.</li><li>Implement circuit breakers for downstream dependencies.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1499/" target="_blank" class="mitre-link">T1499</a> <a href="https://attack.mitre.org/techniques/T1498/" target="_blank" class="mitre-link">T1498</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A04:2021, A05:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">CP-10, AC-17</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T006-02</span>
+                    <span class="threat-title">Missing Audit Trail — PostgreSQL Database</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>PostgreSQL Database</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">48/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 4/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:48%;background:#ffcc00"></div><span class="risk-bar-label">48</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">PostgreSQL Database does not log critical operations, allowing an attacker (or insider) to perform actions that cannot be attributed or reconstructed.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Any action within the component — no evidence remains after the fact.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident response is blind. Regulatory fines for inadequate audit trails (GDPR Art. 30, SOC2 CC7). Legal liability if breach cannot be scoped.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Implement structured logging (JSON) for all state-changing operations.</li><li>Ship logs to centralised SIEM (Splunk/ELK) with tamper-evident storage.</li><li>Include user ID, IP, timestamp, action, and resource in every log event.</li><li>Set log retention minimum 90 days hot, 1 year cold.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1562/" target="_blank" class="mitre-link">T1562</a> <a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-2, AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T007-01</span>
+                    <span class="threat-title">Missing Audit Trail — Redis Cache</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Redis Cache</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">48/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 4/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:48%;background:#ffcc00"></div><span class="risk-bar-label">48</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Redis Cache does not log critical operations, allowing an attacker (or insider) to perform actions that cannot be attributed or reconstructed.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Any action within the component — no evidence remains after the fact.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident response is blind. Regulatory fines for inadequate audit trails (GDPR Art. 30, SOC2 CC7). Legal liability if breach cannot be scoped.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Implement structured logging (JSON) for all state-changing operations.</li><li>Ship logs to centralised SIEM (Splunk/ELK) with tamper-evident storage.</li><li>Include user ID, IP, timestamp, action, and resource in every log event.</li><li>Set log retention minimum 90 days hot, 1 year cold.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1562/" target="_blank" class="mitre-link">T1562</a> <a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-2, AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T003-04</span>
+                    <span class="threat-title">Broken Access Control — Auth Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#34d399;border-color:#34d399">Elevation of Privilege</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Auth Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">40/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:40%;background:#ffcc00"></div><span class="risk-bar-label">40</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Insufficient authorisation checks in Auth Service allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 — #1 OWASP risk.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce authorisation checks server-side for every resource access — never trust client claims.</li><li>Implement RBAC/ABAC framework; deny by default.</li><li>Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.</li><li>Validate JWT signature and algorithm server-side; reject 'alg: none'.</li><li>Automated DAST scans for authorisation bypass in CI/CD.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1548/" target="_blank" class="mitre-link">T1548</a> <a href="https://attack.mitre.org/techniques/T1134/" target="_blank" class="mitre-link">T1134</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AC-6, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T004-05</span>
+                    <span class="threat-title">Broken Access Control — Order Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#34d399;border-color:#34d399">Elevation of Privilege</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Order Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">40/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:40%;background:#ffcc00"></div><span class="risk-bar-label">40</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Insufficient authorisation checks in Order Service allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 — #1 OWASP risk.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce authorisation checks server-side for every resource access — never trust client claims.</li><li>Implement RBAC/ABAC framework; deny by default.</li><li>Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.</li><li>Validate JWT signature and algorithm server-side; reject 'alg: none'.</li><li>Automated DAST scans for authorisation bypass in CI/CD.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1548/" target="_blank" class="mitre-link">T1548</a> <a href="https://attack.mitre.org/techniques/T1134/" target="_blank" class="mitre-link">T1134</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AC-6, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T005-05</span>
+                    <span class="threat-title">Broken Access Control — Payment Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#34d399;border-color:#34d399">Elevation of Privilege</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Payment Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">40/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:40%;background:#ffcc00"></div><span class="risk-bar-label">40</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Insufficient authorisation checks in Payment Service allow a low-privilege user to access or modify resources belonging to other users or perform admin actions.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Horizontal privilege escalation (IDOR), vertical escalation via role confusion, JWT algorithm confusion attacks, mass assignment.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Any user can read/modify any other user's data. Admin panel exposed to regular users. GDPR violation if other users' PII is accessed. A01:2021 — #1 OWASP risk.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce authorisation checks server-side for every resource access — never trust client claims.</li><li>Implement RBAC/ABAC framework; deny by default.</li><li>Use opaque resource IDs (UUIDs) instead of sequential integers to prevent IDOR enumeration.</li><li>Validate JWT signature and algorithm server-side; reject 'alg: none'.</li><li>Automated DAST scans for authorisation bypass in CI/CD.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1548/" target="_blank" class="mitre-link">T1548</a> <a href="https://attack.mitre.org/techniques/T1134/" target="_blank" class="mitre-link">T1134</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AC-6, AC-2</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T007-02</span>
+                    <span class="threat-title">Sensitive Data Exposure — Redis Cache</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Redis Cache</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">40/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:40%;background:#ffcc00"></div><span class="risk-bar-label">40</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Redis Cache stores credentials. Exfiltration via unencrypted storage, over-permissive access controls, or API leakage exposes this data.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Direct database access, API response over-sharing, backup file exposure, unencrypted data at rest.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Credential exposure enables full account takeover and lateral movement across all systems using those credentials.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Encrypt PII at rest using AES-256; rotate encryption keys annually.</li><li>Implement field-level encryption for highly sensitive fields (SSN, payment data).</li><li>Apply data masking in non-production environments.</li><li>Enforce column-level access control — limit which roles can SELECT PII columns.</li><li>Audit all queries touching PII tables.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1213/" target="_blank" class="mitre-link">T1213</a> <a href="https://attack.mitre.org/techniques/T1530/" target="_blank" class="mitre-link">T1530</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021, A01:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-28, AC-6</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-high">High</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">DF004-01</span>
+                    <span class="threat-title">Unencrypted Data Flow — Order Service → PostgreSQL Database</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Order Service → PostgreSQL Database</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">40/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 5/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:40%;background:#ffcc00"></div><span class="risk-bar-label">40</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Data flow 'Order Service to Database' transmits confidential data in plaintext over TCP. Network-positioned attacker can capture and read all traffic.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Man-in-the-middle attack, network tap, ARP poisoning on internal segments.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Full plaintext exposure of all transmitted data. If confidential/restricted: immediate GDPR breach trigger. Credentials in transit = complete system compromise.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Upgrade TCP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.</li><li>Implement mutual TLS (mTLS) for service-to-service flows.</li><li>Disable HTTP fallback; HSTS with 1-year max-age.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1552/" target="_blank" class="mitre-link">T1552</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-8</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T002-05</span>
+                    <span class="threat-title">Application-Layer DoS — API Gateway</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#fb7185;border-color:#fb7185">Denial of Service</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">36/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:36%;background:#ffcc00"></div><span class="risk-bar-label">36</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker floods API Gateway with high-cost requests (complex queries, large uploads, expensive computations) causing resource exhaustion and service unavailability.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">HTTP flood, slow-loris, algorithmic complexity attacks, XML/JSON bombs.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Service outage. SLA breach — potential penalties. Revenue loss during downtime. Reputational damage to brand.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Implement rate limiting per IP and per authenticated user.</li><li>Set request size limits and connection timeouts.</li><li>Deploy CDN with DDoS protection (Cloudflare/AWS Shield) in front of service.</li><li>Implement circuit breakers for downstream dependencies.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1499/" target="_blank" class="mitre-link">T1499</a> <a href="https://attack.mitre.org/techniques/T1498/" target="_blank" class="mitre-link">T1498</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A04:2021, A05:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">CP-10, AC-17</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #ffcc00">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T006-04</span>
+                    <span class="threat-title">Database Query Exhaustion — PostgreSQL Database</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#ffcc00;background:#2a2200;border:1px solid #ffcc00">Medium</span>
+                    <span class="stride-chip" style="color:#fb7185;border-color:#fb7185">Denial of Service</span>
+                    <span class="sprint-badge" style="background:#ff8800">Q1 BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>PostgreSQL Database</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#ffcc00">32/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 4/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:32%;background:#ffcc00"></div><span class="risk-bar-label">32</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Unbounded queries or missing connection pooling limits cause PostgreSQL Database connection exhaustion, crashing the database and all dependent services.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">N+1 query loops, missing pagination, unrestricted JOIN depth.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Full application outage affecting all users. Data writes lost if in-flight transactions are rolled back. Recovery may take hours.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Enforce query timeout limits (e.g. 30s max).</li><li>Implement connection pooling (PgBouncer/HikariCP) with max pool size.</li><li>Add LIMIT clauses to all paginated queries — reject unbounded requests.</li><li>Monitor slow query log; alert on queries exceeding 5s.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1499/" target="_blank" class="mitre-link">T1499</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A04:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">CP-10</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-medium">Medium</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T001-03</span>
+                    <span class="threat-title">Log Tampering / Evasion — Web App</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Web App</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker with access to Web App clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Elevated OS/DB access, log rotation exploit, direct log file write access.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Forward logs to immutable remote SIEM immediately — local logs are secondary.</li><li>Restrict log file write permissions to logging daemon only.</li><li>Alert on log gaps, rotation anomalies, or log volume drops.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T001-04</span>
+                    <span class="threat-title">Error Message Information Leakage — Web App</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Web App</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 2/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Verbose error messages from Web App expose stack traces, internal paths, framework versions, or database query details to unauthenticated users.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Intentional malformed requests; crawler collection of public error pages.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Aids attacker reconnaissance — reduces time-to-exploit by revealing exact technology versions with known CVEs.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Return generic error messages to clients; log verbose errors server-side only.</li><li>Implement global exception handler returning RFC 7807 Problem Details format.</li><li>Remove server/framework headers (X-Powered-By, Server).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1595/" target="_blank" class="mitre-link">T1595</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A05:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SI-10</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T002-03</span>
+                    <span class="threat-title">Log Tampering / Evasion — API Gateway</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker with access to API Gateway clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Elevated OS/DB access, log rotation exploit, direct log file write access.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Forward logs to immutable remote SIEM immediately — local logs are secondary.</li><li>Restrict log file write permissions to logging daemon only.</li><li>Alert on log gaps, rotation anomalies, or log volume drops.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T002-04</span>
+                    <span class="threat-title">Error Message Information Leakage — API Gateway</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>API Gateway</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 3/5 &nbsp;|&nbsp; Impact: 2/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Verbose error messages from API Gateway expose stack traces, internal paths, framework versions, or database query details to unauthenticated users.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Intentional malformed requests; crawler collection of public error pages.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Aids attacker reconnaissance — reduces time-to-exploit by revealing exact technology versions with known CVEs.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Return generic error messages to clients; log verbose errors server-side only.</li><li>Implement global exception handler returning RFC 7807 Problem Details format.</li><li>Remove server/framework headers (X-Powered-By, Server).</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1595/" target="_blank" class="mitre-link">T1595</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A05:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SI-10</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T003-02</span>
+                    <span class="threat-title">Log Tampering / Evasion — Auth Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Auth Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker with access to Auth Service clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Elevated OS/DB access, log rotation exploit, direct log file write access.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Forward logs to immutable remote SIEM immediately — local logs are secondary.</li><li>Restrict log file write permissions to logging daemon only.</li><li>Alert on log gaps, rotation anomalies, or log volume drops.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T004-03</span>
+                    <span class="threat-title">Log Tampering / Evasion — Order Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Order Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker with access to Order Service clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Elevated OS/DB access, log rotation exploit, direct log file write access.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Forward logs to immutable remote SIEM immediately — local logs are secondary.</li><li>Restrict log file write permissions to logging daemon only.</li><li>Alert on log gaps, rotation anomalies, or log volume drops.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">T005-03</span>
+                    <span class="threat-title">Log Tampering / Evasion — Payment Service</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#a78bfa;border-color:#a78bfa">Repudiation</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Payment Service</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Attacker with access to Payment Service clears or manipulates logs to cover tracks, undermining forensic investigation and incident response.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Elevated OS/DB access, log rotation exploit, direct log file write access.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Incident scope cannot be determined. Forensic investigation fails. Regulatory reporting deadlines missed (72h GDPR breach notification).</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Forward logs to immutable remote SIEM immediately — local logs are secondary.</li><li>Restrict log file write permissions to logging daemon only.</li><li>Alert on log gaps, rotation anomalies, or log volume drops.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1070/" target="_blank" class="mitre-link">T1070</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A09:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">AU-9</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+        <div class="threat-card" style="border-left:3px solid #44bb44">
+            <div class="threat-card-header">
+                <div>
+                    <span class="threat-id">DF005-01</span>
+                    <span class="threat-title">Unencrypted Data Flow — Auth Service → Redis Cache</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span class="sev-badge" style="color:#44bb44;background:#0a1f0a;border:1px solid #44bb44">Low</span>
+                    <span class="stride-chip" style="color:#38bdf8;border-color:#38bdf8">Information Disclosure</span>
+                    <span class="sprint-badge" style="background:#555">BACKLOG</span>
+                </div>
+            </div>
+            <div class="threat-meta">Component: <strong>Auth Service → Redis Cache</strong> &nbsp;|&nbsp; Risk Score: <strong style="color:#44bb44">24/100</strong> &nbsp;|&nbsp; Likelihood: 2/5 &nbsp;|&nbsp; Impact: 3/5</div>
+            <div class="risk-bar-wrap"><div class="risk-bar-fill" style="width:24%;background:#44bb44"></div><span class="risk-bar-label">24</span></div>
+            <div class="threat-grid">
+                <div>
+                    <div class="field-label">Description</div>
+                    <div class="field-val">Data flow 'Auth Service to Redis' transmits internal data in plaintext over TCP. Network-positioned attacker can capture and read all traffic.</div>
+                    <div class="field-label" style="margin-top:12px">Attack Vector</div>
+                    <div class="field-val">Man-in-the-middle attack, network tap, ARP poisoning on internal segments.</div>
+                    <div class="field-label" style="margin-top:12px">Business Impact</div>
+                    <div class="field-val impact-text">Full plaintext exposure of all transmitted data. If confidential/restricted: immediate GDPR breach trigger. Credentials in transit = complete system compromise.</div>
+                </div>
+                <div>
+                    <div class="field-label">Mitigations</div>
+                    <ul class="mitigation-list"><li>Upgrade TCP to TLS 1.2+ minimum; enforce TLS 1.3 where possible.</li><li>Implement mutual TLS (mTLS) for service-to-service flows.</li><li>Disable HTTP fallback; HSTS with 1-year max-age.</li></ul>
+                    <div class="field-label" style="margin-top:12px">MITRE ATT&CK</div>
+                    <div><a href="https://attack.mitre.org/techniques/T1552/" target="_blank" class="mitre-link">T1552</a></div>
+                    <div class="field-label" style="margin-top:8px">OWASP 2021</div>
+                    <div style="font-size:12px;color:#aaa">A02:2021</div>
+                    <div class="field-label" style="margin-top:8px">NIST 800-53</div>
+                    <div style="font-size:12px;color:#aaa">SC-8</div>
+                    <div class="field-label" style="margin-top:8px">Remediation Effort</div>
+                    <span class="effort-badge effort-low">Low</span>
+                </div>
+            </div>
+            
+        </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<div class="report-footer">
+  <span>Generated by P2 Threat Model Generator · 2026-06-28 11:04:31</span>
+  <span>Methodology: STRIDE · Frameworks: MITRE ATT&CK, OWASP 2021, NIST 800-53</span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+
+    const strideCtx = document.getElementById('strideChart').getContext('2d');
+    new Chart(strideCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ["Spoofing", "Tampering", "Repudiation", "Information Disclosure", "Denial of Service", "Elevation of Privilege"],
+            datasets: [{ data: [5, 5, 7, 10, 3, 5], backgroundColor: ["#ff6b9d", "#ff8800", "#a78bfa", "#38bdf8", "#fb7185", "#34d399"], borderWidth: 2, borderColor: '#111' }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#ccc', font: { size: 11 } } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} threat(s)` } }
+            }
+        }
+    });
+
+    const sevCtx = document.getElementById('sevChart').getContext('2d');
+    new Chart(sevCtx, {
+        type: 'bar',
+        data: {
+            labels: ["Critical", "High", "Medium", "Low"],
+            datasets: [{ data: [2, 15, 10, 8], backgroundColor: ["#ff4444", "#ff8800", "#ffcc00", "#44bb44"], borderRadius: 4 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#999' }, grid: { color: '#222' } },
+                y: { ticks: { color: '#999', stepSize: 1 }, grid: { color: '#222' }, beginAtZero: true }
+            }
+        }
+    });
+
+    const top5Ctx = document.getElementById('top5Chart').getContext('2d');
+    new Chart(top5Ctx, {
+        type: 'bar',
+        data: {
+            labels: ["Injection Attack \u2014 Web App", "Injection Attack \u2014 API Gateway", "Identity Spoofing \u2014 Web App", "Identity Spoofing \u2014 API Gateway", "Broken Access Control \u2014 Web App"],
+            datasets: [{ data: [80, 80, 64, 64, 60], backgroundColor: ["#ff4444", "#ff4444", "#ff8800", "#ff8800", "#ff8800"], borderRadius: 4 }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { max: 100, ticks: { color: '#999' }, grid: { color: '#222' } },
+                y: { ticks: { color: '#ccc', font: { size: 11 } }, grid: { display: false } }
+            }
+        }
+    });
+    
+</script>
+</body>
+</html>
