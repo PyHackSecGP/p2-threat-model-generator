@@ -1,0 +1,163 @@
+application:
+  name: "E-Commerce Platform"
+  version: "2.1.0"
+  description: "Customer-facing e-commerce web app with payment processing."
+  owner: "Platform Security Team"
+  team: "Product Engineering"
+  environment: production
+  internet_facing: true
+  data_classification: confidential
+  compliance_frameworks:
+    - gdpr
+    - pci_dss
+
+  trust_boundaries:
+    - name: "Internet"
+      components: ["Browser", "Mobile App"]
+      description: "Untrusted public internet"
+    - name: "DMZ"
+      components: ["API Gateway", "Web App"]
+      description: "Demilitarised zone — internet-facing services"
+    - name: "Internal"
+      components: ["Auth Service", "Order Service", "Payment Service", "Database", "Cache"]
+      description: "Trusted internal network"
+
+  components:
+    - name: "Web App"
+      type: web_app
+      description: "React SPA served via CDN"
+      technology: "React 18, TypeScript"
+      auth_type: jwt
+      stores_pii: false
+      stores_credentials: false
+      internet_facing: true
+      has_logging: true
+      has_rate_limiting: false
+      trust_boundary: DMZ
+
+    - name: "API Gateway"
+      type: api
+      description: "REST API gateway — all client traffic enters here"
+      technology: "Python/FastAPI, Nginx"
+      auth_type: jwt
+      stores_pii: false
+      stores_credentials: false
+      internet_facing: true
+      has_logging: true
+      has_rate_limiting: true
+      trust_boundary: DMZ
+
+    - name: "Auth Service"
+      type: auth_service
+      description: "Handles login, registration, MFA, session management"
+      technology: "Python 3.11, PostgreSQL"
+      auth_type: jwt
+      stores_pii: true
+      stores_credentials: true
+      internet_facing: false
+      has_logging: true
+      has_rate_limiting: true
+      trust_boundary: Internal
+
+    - name: "Order Service"
+      type: api
+      description: "Order processing microservice"
+      technology: "Python 3.11, FastAPI"
+      auth_type: jwt
+      stores_pii: true
+      stores_credentials: false
+      internet_facing: false
+      has_logging: true
+      has_rate_limiting: false
+      trust_boundary: Internal
+
+    - name: "Payment Service"
+      type: api
+      description: "Payment processing — integrates with Stripe"
+      technology: "Python 3.11, Stripe SDK"
+      auth_type: mtls
+      stores_pii: true
+      stores_credentials: true
+      internet_facing: false
+      has_logging: true
+      has_rate_limiting: true
+      trust_boundary: Internal
+
+    - name: "PostgreSQL Database"
+      type: database
+      description: "Primary relational database — users, orders, products"
+      technology: "PostgreSQL 15"
+      auth_type: basic
+      stores_pii: true
+      stores_credentials: true
+      internet_facing: false
+      has_logging: false
+      has_rate_limiting: false
+      trust_boundary: Internal
+
+    - name: "Redis Cache"
+      type: cache
+      description: "Session cache and rate limit counters"
+      technology: "Redis 7"
+      auth_type: none
+      stores_pii: false
+      stores_credentials: true
+      internet_facing: false
+      has_logging: false
+      has_rate_limiting: false
+      trust_boundary: Internal
+
+  data_flows:
+    - name: "Browser to API Gateway"
+      source: "Browser"
+      destination: "API Gateway"
+      data_classification: confidential
+      encrypted: true
+      authenticated: true
+      crosses_trust_boundary: true
+      protocol: HTTPS
+
+    - name: "API Gateway to Auth Service"
+      source: "API Gateway"
+      destination: "Auth Service"
+      data_classification: confidential
+      encrypted: true
+      authenticated: true
+      crosses_trust_boundary: true
+      protocol: HTTPS
+
+    - name: "API Gateway to Order Service"
+      source: "API Gateway"
+      destination: "Order Service"
+      data_classification: confidential
+      encrypted: false
+      authenticated: true
+      crosses_trust_boundary: true
+      protocol: HTTP
+
+    - name: "Order Service to Database"
+      source: "Order Service"
+      destination: "PostgreSQL Database"
+      data_classification: confidential
+      encrypted: false
+      authenticated: true
+      crosses_trust_boundary: false
+      protocol: TCP
+
+    - name: "Auth Service to Redis"
+      source: "Auth Service"
+      destination: "Redis Cache"
+      data_classification: internal
+      encrypted: false
+      authenticated: false
+      crosses_trust_boundary: false
+      protocol: TCP
+
+    - name: "Payment Service to Stripe"
+      source: "Payment Service"
+      destination: "Stripe API"
+      data_classification: restricted
+      encrypted: true
+      authenticated: true
+      crosses_trust_boundary: true
+      protocol: HTTPS
