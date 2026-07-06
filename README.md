@@ -90,8 +90,8 @@ output/
 
 ## LLM Configuration
 
-Ollama endpoint: `http://100.126.22.55:11434` (on-prem, no data leaves network)
-Model: `hermes3:70b`
+Ollama endpoint: `http://localhost:11434` by default (on-prem, no data leaves network). Override with `OLLAMA_HOST` env var.
+Model: `hermes3:70b` (override with `THREAT_MODEL`)
 
 ```bash
 # Disable LLM

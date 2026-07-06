@@ -1,11 +1,12 @@
 """LLM narrative generation via Ollama (on-prem, no data leaves network)."""
 from __future__ import annotations
 import json
+import os
 import requests
 from models import Threat
 
-OLLAMA_BASE = "http://100.126.22.55:11434"
-MODEL = "hermes3:70b"
+OLLAMA_BASE = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+MODEL = os.environ.get("THREAT_MODEL", "hermes3:70b")
 TIMEOUT = 120
 
 
