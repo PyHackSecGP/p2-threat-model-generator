@@ -1,168 +1,150 @@
-# P2 — Threat Model Generator
-
-**Role:** Security Analyst / Security Engineer portfolio project  
-**Stack:** Python 3.11 · STRIDE · MITRE ATT&CK · OWASP 2021 · NIST 800-53 · Ollama (on-prem LLM) · Chart.js
+# P2 — Threat Model Generator: Interview Prep Notes
 
 ---
 
-## Why I Built This Instead of Using an Existing Tool
+## 30-Second Pitch (memorise this)
 
-Tools like **IriusRisk**, **ThreatModeler**, and **Microsoft Threat Modeling Tool** already exist and are used in production security programs. I didn't build this to replace them — I built it to *understand* them deeply enough to configure, evaluate, and extend them in a real security program.
+"I built a threat modelling tool that reads files developers already write — docker-compose, Kubernetes manifests, OpenAPI specs — and produces a scored threat inventory with MITRE ATT&CK mappings, compliance flags, and AI-generated remediation suggestions. The whole thing runs in 2 minutes and integrates into a CI pipeline so threat modelling happens on every PR instead of in a quarterly workshop."
 
-Before I can tell a team whether a $50k/year threat modelling SaaS is worth buying, or before I can customise its rule sets for a specific compliance framework, I need to know what's happening under the hood:
+---
 
+## Q: Why did you build this instead of using IriusRisk / ThreatModeler / Microsoft TMT?
+
+Those tools exist and I've looked at them. I built this to understand what they're doing under the hood — not to replace them. Before I can configure one, evaluate whether it's worth the $50k/year, or extend its rule sets, I need to know how a threat modelling engine actually works.
+
+Specifically I needed to answer:
 - How do you translate "this component stores PII" into a specific, scored threat?
-- How do you maintain scoring consistency across 40 components without a human making judgment calls?
-- Where does MITRE ATT&CK fit in threat modelling vs. incident response vs. detection engineering?
-- What does a GDPR compliance flag *mean* at the architecture level, and which NIST control addresses it?
+- What component attributes actually drive each STRIDE category?
+- How does MITRE ATT&CK connect to threat modelling vs. detection engineering?
+- What does a GDPR compliance flag mean at architecture level, and which NIST 800-53 control addresses it?
 
-Building this from scratch forced me to answer every one of those questions. I can now sit in a threat modelling session, run one of those commercial tools, and immediately understand *why* it flagged something — not just that it did. That's a different level of competence than knowing how to click through a UI.
-
----
-
-## What It Does
-
-Given an application descriptor — YAML, OpenAPI spec, Dockerfile, docker-compose, or Kubernetes manifest — the pipeline:
-
-1. **Parses** the architecture into components, data flows, trust boundaries, and auth types
-2. **Runs STRIDE** — evaluates every component against all six threat categories using attribute-based heuristics
-3. **Scores each threat** using `risk_score = likelihood × impact × 4` → Critical / High / Medium / Low
-4. **Maps to MITRE ATT&CK** — every threat gets a technique ID so it can connect to detection and response work
-5. **Flags compliance exposure** — GDPR, PCI-DSS, SOC2, HIPAA with specific NIST 800-53 control references
-6. **Enriches with LLM narratives** — top threats get executive-language explanations via on-prem Ollama (no data leaves the network)
-7. **Outputs** a self-contained HTML report with Chart.js visuals and machine-readable JSON for CI/CD
+Building it forced me to answer all of those. Now I can sit next to a commercial tool and understand every finding it produces.
 
 ---
 
-## Concrete Scenario: Fintech Startup Pre-Launch
+## Q: What is STRIDE? Walk me through it.
 
-A fintech startup is launching a payment API. A developer opens a PR with a new `docker-compose.yml`. Instead of waiting for a dedicated threat model session that may never get scheduled, the CI pipeline runs on every PR:
+STRIDE is a threat modelling framework. Each letter is a threat category:
 
-```bash
-python p2_threat_model.py --input docker-compose.yml --output output/
-```
+| Letter | Threat | What it means |
+|---|---|---|
+| S | Spoofing | Attacker pretends to be someone they're not |
+| T | Tampering | Attacker modifies data in transit or at rest |
+| R | Repudiation | User denies doing something, no audit trail to prove otherwise |
+| I | Information Disclosure | Data exposed that shouldn't be |
+| D | Denial of Service | System made unavailable |
+| E | Elevation of Privilege | User gains more access than they should have |
 
-**Output, 2 minutes later:**
-```
-[+] Application: Payment Service | Components: 4 | Data flows: 6
-[+] Generated 31 threats
-[+] Overall risk score: 84/100
-[+] Critical: 4 | High: 9 | Medium: 13 | Low: 5
-[+] Compliance flags: GDPR, PCI-DSS
-
-── Top Findings ───────────────────────────────────────────
-  [Critical]  92.0  Postgres — PII stored, no encryption at rest (CWE-312)
-  [Critical]  88.0  Payment API — No rate limiting on /charge endpoint (T1499)
-  [Critical]  80.0  Redis — No auth, internet-accessible port (T1078.001)
-  [High    ]  68.0  JWT secret hardcoded in environment variable (CWE-798)
-```
-
-The PR gets a risk summary comment automatically. The developer fixes Redis auth and the rate limiting gap before the PR merges. The startup avoids an exposure that would have triggered a PCI-DSS audit finding.
-
-This is why threat modelling needs to be in the pipeline, not a quarterly workshop. Moving it left means catching design flaws before they become code, and catching code flaws before they become incidents.
+In the engine, I evaluate every component against every category. The triggers come from component attributes — if a component is internet-facing with no auth, that fires Spoofing. If a data flow crosses a trust boundary without encryption, that fires Information Disclosure.
 
 ---
 
-## STRIDE Implementation — What I Had to Actually Learn
-
-STRIDE is simple in concept. Operationalising it is where the real work is. What component attributes trigger which threat, and why?
-
-**Example: Spoofing**
-
-```python
-# engine/stride.py — simplified
-if component.auth_type == AuthType.NONE and component.internet_facing:
-    threats.append(Threat(
-        category=STRIDE.SPOOFING,
-        title=f"No Authentication — {component.name}",
-        likelihood=5,          # internet-facing + no auth = near-certain
-        impact=4,              # attacker acts as any user
-        mitre_technique="T1078",    # Valid Accounts
-        nist_control="IA-2",        # Identification and Authentication
-        cwe="CWE-306",              # Missing Authentication for Critical Function
-    ))
-```
-
-Every one of the ~30 STRIDE rules required understanding the *security reasoning* behind it — not just the category name. That understanding transfers directly to configuring commercial tools, writing detection rules, and doing manual threat model reviews.
-
----
-
-## Kubernetes Parser — Why It Was the Hardest Input Format
-
-Kubernetes threat modelling is architecturally different from application-level modelling. The threats aren't about what the application does — they're about how the container runtime, network policies, and secret management interact.
-
-Key things the parser had to reason about:
-
-- **`NetworkPolicy` as trust boundary** — absence of one means all pods in a namespace can reach each other
-- **Secrets in env vars vs. volume mounts** — both expose secrets, but env var injection is visible to child processes and often logged
-- **`LoadBalancer` vs `ClusterIP` Services** — one is internet-facing, the other isn't; the parser promotes a workload to internet-facing when a LoadBalancer Service selects it
-- **`privileged: true` and `runAsUser: 0`** — these are effectively container escapes waiting for a CVE; the parser flags them as high-severity notes on the component
-
-Commercial K8s security tools like Checkov and Trivy check similar things. Building this parser gave me the foundation to read their output, understand why a specific finding matters, and extend their rule sets for custom environments.
-
----
-
-## LLM Integration — Deliberate Design Decisions
-
-**Why on-prem Ollama only?** Application descriptors contain component names, data classifications, and architecture topology. Sending that to a cloud API is itself an information disclosure finding. All LLM calls route to a local Ollama instance on the homelab GPU server.
-
-**Why only top N threats get enriched?** LLM calls take ~8 seconds each. For a 40-threat model, enriching everything takes 5 minutes and produces redundant output. The top 10 by risk score are where the narrative value is — executives need to understand *why* the top finding matters, not all 40.
-
-**Why not let the LLM generate the threats?** LLMs hallucinate. A rule-based STRIDE engine correctly flags "no auth on internet-facing component" every time. The LLM adds *explanation quality* to machine-detected findings — it doesn't replace the detection logic. This is the same design used by commercial tools that bolt AI onto deterministic rule engines.
-
----
-
-## Architecture
+## Q: How does the risk scoring work?
 
 ```
-Input file (auto-detected)
-    │
-    ▼
-parsers/
-  yaml_parser     → explicit application descriptor
-  openapi_parser  → API endpoint inventory + auth schemes
-  docker_parser   → compose topology + Dockerfile posture
-  k8s_parser      → cluster architecture, network policy, ingress
-  wizard          → interactive CLI
-    │
-    ▼
-engine/stride.py      attribute-based heuristics → RawThreat list
-    │
-    ▼
-engine/scorer.py      risk_score, severity, MITRE, OWASP, NIST, compliance
-    │
-    ▼
-engine/llm.py         Ollama enrichment (optional, on-prem, top N only)
-    │
-    ▼
-reporter/
-  html_reporter   → self-contained HTML + Chart.js
-  json_reporter   → machine-readable JSON for CI/CD
+risk_score = likelihood × impact × 4
 ```
+
+Likelihood and impact are both 1-5. Max score is 100.
+
+- Critical: 80-100
+- High: 50-79
+- Medium: 25-49
+- Low: 0-24
+
+Likelihood factors: is it internet-facing? does it have no auth? does it store sensitive data?  
+Impact factors: PII involved? payment data? core infrastructure?
+
+The `× 4` is a scaling factor to spread scores across the full 0-100 range.
 
 ---
 
-## CI/CD Integration
+## Q: How does MITRE ATT&CK fit into this?
 
-`.github/workflows/threat-model.yml` triggers on every PR touching application descriptors:
-- Runs the rule engine (no LLM — deterministic, fast, no external dependencies)
-- Uploads HTML + JSON artifacts
-- Posts a risk summary comment on the PR with severity breakdown and compliance flags
+ATT&CK is the taxonomy. Every threat generated gets mapped to a technique ID — for example:
+- No auth on internet-facing component → T1078 (Valid Accounts)
+- No rate limiting → T1499 (Endpoint Denial of Service)
+- Secrets in env vars → T1552.001 (Unsecured Credentials: Credentials in Files)
 
-This is the same pattern commercial tools use for pipeline integration. Building it myself means I understand exactly what data is flowing, what the latency tradeoffs are, and how to extend it.
+The reason: threat modelling findings should connect directly to what detection engineers are writing rules for. If the threat model says T1078 is a risk, the detection team can verify they have coverage for it.
 
 ---
 
-## Quick Start
+## Q: How does the Kubernetes parser work? What was hard about it?
 
-```bash
-git clone https://git.greenbladesec.com/gpsingh/p2-threat-model-generator
-cd p2-threat-model-generator
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+K8s manifests are multi-document YAML. The parser reads all of them and builds the application model:
 
-python p2_threat_model.py --input examples/webapp.yaml --output output/
-python p2_threat_model.py --input examples/k8s-webapp.yaml --output output/
-python p2_threat_model.py --input docker-compose.yml --no-llm --output output/
-python p2_threat_model.py --wizard
-```
+- `Deployment` / `StatefulSet` → Component with attributes inferred from container spec
+- `Service` type `LoadBalancer` or `NodePort` → marks the workload as internet-facing
+- `Ingress` → creates data flows from Internet to backend, checks for TLS
+- `Secret` → flags the workload as storing credentials, triggers GDPR flag
+- `NetworkPolicy` → creates a trust boundary
+
+The hard part: the relationship between objects. A `LoadBalancer` Service makes a `Deployment` internet-facing — but you only know that if you cross-reference the Service's `selector` labels against the Deployment's `labels`. Had to parse all documents first, then resolve relationships in a second pass.
+
+Also: K8s-specific risks like `privileged: true` and `runAsUser: 0` are effectively container escape pre-conditions. Those needed specific detection logic separate from the standard STRIDE rules.
+
+---
+
+## Q: Why does the LLM only enrich the top N threats?
+
+Two reasons:
+
+1. **Speed** — each Ollama call takes ~8 seconds. For a 40-threat report, enriching all of them takes 5+ minutes. Top 10 is enough for executive communication.
+
+2. **Value** — executives and developers need to understand the *top* findings in plain language. The bottom 30 are tracked in JSON for completeness; they don't need narrative.
+
+---
+
+## Q: Why local Ollama instead of a cloud LLM?
+
+Application descriptors contain architecture details, component names, data classifications. Sending that to OpenAI or Anthropic is itself a finding — you're disclosing your system design to a third party. On-prem Ollama on the homelab keeps all data on the network.
+
+Same reason commercial tools with "AI narratives" often let you bring your own LLM endpoint.
+
+---
+
+## Q: Why not let the LLM generate the threats?
+
+LLMs hallucinate. A rule-based STRIDE engine will correctly flag "no auth on internet-facing component" every time — deterministic, reproducible, auditable. The LLM adds *explanation quality* to machine-detected findings. It doesn't replace the detection logic.
+
+This is the right split: deterministic engines detect, LLMs explain. Same pattern used by Snyk, Semgrep, and the commercial threat modelling tools when they add AI features.
+
+---
+
+## Q: How does it integrate into CI?
+
+GitHub Actions workflow (`.github/workflows/threat-model.yml`):
+- Triggers on PRs that touch application config files
+- Runs the rule engine (no LLM — fast, no external deps)
+- Uploads HTML + JSON as build artifacts
+- Posts risk score + severity counts as a PR comment
+
+Teams can gate PRs on risk score threshold. Same as gating on test failures, but for security posture.
+
+---
+
+## Key technical facts to have ready
+
+- **Input formats**: YAML descriptor, OpenAPI/Swagger, Dockerfile, docker-compose, Kubernetes manifests — auto-detected
+- **STRIDE categories**: 6 — Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege
+- **Compliance frameworks checked**: GDPR, PCI-DSS, SOC2, HIPAA
+- **Standards referenced**: OWASP Top 10 2021, NIST 800-53
+- **LLM**: Ollama (local), model configurable via `THREAT_MODEL` env var, `OLLAMA_HOST` for endpoint
+- **Output**: self-contained HTML (Chart.js, no CDN calls), JSON export
+- **Commercial equivalents**: IriusRisk, ThreatModeler, Microsoft Threat Modeling Tool, OWASP Threat Dragon
+
+---
+
+## Q: What would you improve or add next?
+
+- **Terraform / HCL parser** — model cloud infrastructure (IAM policies, S3 bucket ACLs, security groups) — this is where most real cloud risk lives
+- **DefectDojo push** — send findings via API directly to vuln management so they get triaged and tracked with SLAs
+- **SARIF output** — import into GitHub Security tab alongside SAST findings
+- **Diff mode** — compare two threat models and show what changed between versions — useful for PR reviews of architecture changes
+
+---
+
+## What I'd say if asked "what was the hardest part?"
+
+Operationalising STRIDE. The framework sounds simple — six categories, apply to each component. But the hard part is deciding *what specific attributes* of a component trigger each threat category, and at what severity. That required reading through real vulnerability databases and CVEs to calibrate what "likely" and "high impact" actually mean for each combination of component type, auth type, and exposure. The rule engine has ~30 rules, each one backed by a specific security rationale.
