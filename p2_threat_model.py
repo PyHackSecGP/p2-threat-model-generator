@@ -28,9 +28,12 @@ def _detect_input_type(path: str) -> str:
         return "docker_compose"
     suffix = p.suffix.lower()
     if suffix in (".yaml", ".yml", ".json"):
-        content = p.read_text()[:512].lower()
+        content = p.read_text()[:1024].lower()
         if "openapi" in content or "swagger" in content:
             return "openapi"
+        if any(k in content for k in ("kind: deployment", "kind: service", "kind: ingress",
+                                       "kind: statefulset", "kind: daemonset", "apiversion:")):
+            return "k8s"
         return "yaml"
     return "yaml"
 
@@ -59,6 +62,9 @@ def _load_app(args):
     elif itype == "dockerfile":
         from parsers.docker_parser import parse_dockerfile
         return parse_dockerfile(args.input)
+    elif itype == "k8s":
+        from parsers.k8s_parser import parse_k8s
+        return parse_k8s(args.input)
     else:
         print(f"Error: unknown input type '{itype}'", file=sys.stderr)
         sys.exit(1)
@@ -74,6 +80,7 @@ Input types (auto-detected):
   OpenAPI / Swagger      python p2_threat_model.py --input openapi.yaml
   docker-compose.yml     python p2_threat_model.py --input docker-compose.yml
   Dockerfile             python p2_threat_model.py --input Dockerfile
+  Kubernetes manifests   python p2_threat_model.py --input deployment.yaml
   Interactive wizard     python p2_threat_model.py --wizard
 
 Examples:
@@ -83,7 +90,7 @@ Examples:
         """,
     )
     parser.add_argument("--input", "-i", help="Input file path")
-    parser.add_argument("--input-type", choices=["yaml", "openapi", "docker_compose", "dockerfile"],
+    parser.add_argument("--input-type", choices=["yaml", "openapi", "docker_compose", "dockerfile", "k8s"],
                         help="Override auto-detection of input type")
     parser.add_argument("--output", "-o", default="output", help="Output directory (default: ./output)")
     parser.add_argument("--wizard", action="store_true", help="Run interactive wizard instead of file input")
