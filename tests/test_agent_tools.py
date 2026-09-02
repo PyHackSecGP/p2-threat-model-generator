@@ -1,10 +1,12 @@
 """Unit tests for agent tools."""
 from __future__ import annotations
 import json
+from unittest.mock import patch
 from agent.session import reset_session, get_session
 from agent.tools import (
     start_app, set_compliance, add_component, add_data_flow,
     list_components, list_flows, get_app, run_stride_analysis,
+    enrich_threats,
 )
 
 
@@ -161,3 +163,26 @@ def test_run_stride_needs_descriptor() -> None:
     reset_session("st2")
     data = json.loads(run_stride_analysis(session_id="st2"))
     assert data["ok"] is False
+
+
+def test_enrich_threats_no_threats() -> None:
+    _start("e1")
+    data = json.loads(enrich_threats(session_id="e1", max_threats=3))
+    assert data["ok"] is False
+    assert "no threats" in data["error"].lower()
+
+
+def test_enrich_threats_calls_enrich_all() -> None:
+    _start("e2")
+    add_component(session_id="e2", name="API", type="api",
+                  technology="", auth_type="none", stores_pii=True,
+                  stores_credentials=False, internet_facing=True,
+                  has_logging=False, has_rate_limiting=False, notes="")
+    run_stride_analysis(session_id="e2")
+    with patch("agent.tools.enrich_all") as mock:
+        result = enrich_threats(session_id="e2", max_threats=2)
+        mock.assert_called_once()
+        args, kwargs = mock.call_args
+        assert kwargs.get("max_threats", args[1] if len(args) > 1 else None) == 2
+    data = json.loads(result)
+    assert data["ok"] is True

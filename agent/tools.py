@@ -6,6 +6,7 @@ from agent_core.models import ToolRisk
 from models import ApplicationDescriptor, Component, ComponentType, AuthType, DataFlow
 from .session import get_session, has_session
 from engine.stride import run_stride
+from engine.llm import enrich_all
 
 _VALID_ENVS = {"production", "staging", "development"}
 _VALID_DATA_CLASS = {"public", "internal", "confidential", "restricted"}
@@ -180,3 +181,19 @@ def run_stride_analysis(session_id: str) -> str:
     for t in threats:
         counts[t.stride_category.value] = counts.get(t.stride_category.value, 0) + 1
     return _ok(threat_count=len(threats), stride_counts=counts)
+
+
+@tool(description="Enrich the top N highest-scoring threats with LLM-written narratives via "
+                  "the Ollama endpoint configured in engine/llm.py. Skips silently if Ollama "
+                  "is unreachable. Call after run_stride_analysis.",
+      risk=ToolRisk.NONE)
+def enrich_threats(session_id: str, max_threats: int) -> str:
+    """Enrich threats with LLM-generated narratives."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    threats = get_session(session_id)["threats"]
+    if not threats:
+        return _err("No threats to enrich. Call run_stride_analysis first.")
+    enrich_all(threats, max_threats=max_threats)
+    enriched = sum(1 for t in threats if t.llm_narrative)
+    return _ok(enriched=enriched, total=len(threats))
