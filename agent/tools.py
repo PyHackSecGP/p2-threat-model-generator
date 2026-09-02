@@ -1,6 +1,7 @@
 """@tool wrappers exposing threat-model operations to the agent."""
 from __future__ import annotations
 import json
+import os
 from agent_core import tool
 from agent_core.models import ToolRisk
 from models import ApplicationDescriptor, Component, ComponentType, AuthType, DataFlow
@@ -8,6 +9,8 @@ from .session import get_session, has_session
 from engine.stride import run_stride
 from engine.llm import enrich_all
 from engine.scorer import build_threat_model
+from reporter.json_reporter import generate_json
+from reporter.html_reporter import generate_html
 
 _VALID_ENVS = {"production", "staging", "development"}
 _VALID_DATA_CLASS = {"public", "internal", "confidential", "restricted"}
@@ -226,3 +229,29 @@ def score_threats(session_id: str) -> str:
         threat_count=len(tm.threats),
         compliance_flag_count=len(tm.compliance_flags),
     )
+
+
+@tool(description="Write threat-model report file(s) to output_dir. "
+                  "format: json|html|all. Requires score_threats to have been called first.",
+      risk=ToolRisk.FILESYSTEM)
+def generate_report(session_id: str, format: str, output_dir: str) -> str:
+    """Generate threat-model report in the specified format."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    tm = get_session(session_id)["model"]
+    if tm is None:
+        return _err("No model. Call score_threats first.")
+    os.makedirs(output_dir, exist_ok=True)
+    slug = tm.app.name.lower().replace(" ", "-")
+    written: list[str] = []
+    if format in ("json", "all"):
+        path = os.path.join(output_dir, f"{slug}-threat-model.json")
+        generate_json(tm, path)
+        written.append(path)
+    if format in ("html", "all"):
+        path = os.path.join(output_dir, f"{slug}-threat-model.html")
+        generate_html(tm, path)
+        written.append(path)
+    if not written:
+        return _err(f"Unknown format {format!r}. Valid: json|html|all.")
+    return _ok(files=written, format=format)

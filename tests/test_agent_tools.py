@@ -1,12 +1,13 @@
 """Unit tests for agent tools."""
 from __future__ import annotations
 import json
+import os
 from unittest.mock import patch
 from agent.session import reset_session, get_session
 from agent.tools import (
     start_app, set_compliance, add_component, add_data_flow,
     list_components, list_flows, get_app, run_stride_analysis,
-    enrich_threats, score_threats,
+    enrich_threats, score_threats, generate_report,
 )
 
 
@@ -203,3 +204,27 @@ def test_score_threats_builds_model() -> None:
     tm = get_session("sc1")["model"]
     assert tm is not None
     assert tm.overall_risk_score == data["overall_risk_score"]
+
+
+def test_generate_report_json_and_html(tmp_path) -> None:
+    _start("g1")
+    add_component(session_id="g1", name="API", type="api",
+                  technology="", auth_type="none", stores_pii=True,
+                  stores_credentials=False, internet_facing=True,
+                  has_logging=False, has_rate_limiting=False, notes="")
+    run_stride_analysis(session_id="g1")
+    score_threats(session_id="g1")
+    result = generate_report(session_id="g1", format="all", output_dir=str(tmp_path))
+    data = json.loads(result)
+    assert data["ok"] is True
+    files = os.listdir(tmp_path)
+    assert any(f.endswith(".json") for f in files)
+    assert any(f.endswith(".html") for f in files)
+
+
+def test_generate_report_requires_score() -> None:
+    _start("g2")
+    result = generate_report(session_id="g2", format="json", output_dir=".")
+    data = json.loads(result)
+    assert data["ok"] is False
+    assert "score_threats" in data["error"]
