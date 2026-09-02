@@ -6,7 +6,7 @@ from agent.session import reset_session, get_session
 from agent.tools import (
     start_app, set_compliance, add_component, add_data_flow,
     list_components, list_flows, get_app, run_stride_analysis,
-    enrich_threats,
+    enrich_threats, score_threats,
 )
 
 
@@ -186,3 +186,20 @@ def test_enrich_threats_calls_enrich_all() -> None:
         assert kwargs.get("max_threats", args[1] if len(args) > 1 else None) == 2
     data = json.loads(result)
     assert data["ok"] is True
+
+
+def test_score_threats_builds_model() -> None:
+    _start("sc1")
+    add_component(session_id="sc1", name="API", type="api",
+                  technology="", auth_type="none", stores_pii=True,
+                  stores_credentials=False, internet_facing=True,
+                  has_logging=False, has_rate_limiting=False, notes="")
+    run_stride_analysis(session_id="sc1")
+    result = score_threats(session_id="sc1")
+    data = json.loads(result)
+    assert data["ok"] is True
+    assert data["overall_risk_score"] >= 0
+    assert "severity_breakdown" in data
+    tm = get_session("sc1")["model"]
+    assert tm is not None
+    assert tm.overall_risk_score == data["overall_risk_score"]

@@ -7,6 +7,7 @@ from models import ApplicationDescriptor, Component, ComponentType, AuthType, Da
 from .session import get_session, has_session
 from engine.stride import run_stride
 from engine.llm import enrich_all
+from engine.scorer import build_threat_model
 
 _VALID_ENVS = {"production", "staging", "development"}
 _VALID_DATA_CLASS = {"public", "internal", "confidential", "restricted"}
@@ -197,3 +198,31 @@ def enrich_threats(session_id: str, max_threats: int) -> str:
     enrich_all(threats, max_threats=max_threats)
     enriched = sum(1 for t in threats if t.llm_narrative)
     return _ok(enriched=enriched, total=len(threats))
+
+
+@tool(description="Compute risk scores, compliance flags, and overall risk. Builds the final "
+                  "ThreatModel from the current threats. Call after run_stride_analysis "
+                  "(and optionally enrich_threats).",
+      risk=ToolRisk.NONE)
+def score_threats(session_id: str) -> str:
+    """Score threats and build the final threat model."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    state = get_session(session_id)
+    threats = state["threats"]
+    if not threats:
+        return _err("No threats to score. Call run_stride_analysis first.")
+    tm = build_threat_model(state["descriptor"], threats)
+    state["model"] = tm
+    breakdown = {
+        "critical": len(tm.critical_threats),
+        "high": len(tm.high_threats),
+        "medium": len(tm.medium_threats),
+        "low": len(tm.low_threats),
+    }
+    return _ok(
+        overall_risk_score=tm.overall_risk_score,
+        severity_breakdown=breakdown,
+        threat_count=len(tm.threats),
+        compliance_flag_count=len(tm.compliance_flags),
+    )
