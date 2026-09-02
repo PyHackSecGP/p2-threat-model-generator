@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 from agent.session import reset_session, get_session
-from agent.tools import start_app, set_compliance
+from agent.tools import start_app, set_compliance, add_component, add_data_flow
 
 
 def test_start_app_creates_descriptor() -> None:
@@ -51,3 +51,61 @@ def test_set_compliance_requires_start_app_first() -> None:
     data = json.loads(result)
     assert data["ok"] is False
     assert "start_app" in data["error"]
+
+
+def _start(sid: str) -> None:
+    reset_session(sid)
+    start_app(session_id=sid, name="A", version="1", description="",
+              owner="", environment="production", internet_facing=True,
+              data_classification="internal")
+
+
+def test_add_component_ok() -> None:
+    _start("c1")
+    result = add_component(
+        session_id="c1", name="API", type="api",
+        technology="FastAPI", auth_type="jwt",
+        stores_pii=True, stores_credentials=False,
+        internet_facing=True, has_logging=True,
+        has_rate_limiting=False, notes="",
+    )
+    data = json.loads(result)
+    assert data["ok"] is True
+    assert data["component_count"] == 1
+    d = get_session("c1")["descriptor"]
+    assert d.components[0].name == "API"
+    assert d.components[0].stores_pii is True
+
+
+def test_add_component_rejects_bad_type() -> None:
+    _start("c2")
+    result = add_component(
+        session_id="c2", name="X", type="unicorn",
+        technology="", auth_type="none",
+        stores_pii=False, stores_credentials=False,
+        internet_facing=False, has_logging=True,
+        has_rate_limiting=False, notes="",
+    )
+    data = json.loads(result)
+    assert data["ok"] is False
+    assert "type" in data["error"]
+
+
+def test_add_data_flow_ok() -> None:
+    _start("f1")
+    add_component(session_id="f1", name="Web", type="web_app",
+                  technology="", auth_type="none", stores_pii=False,
+                  stores_credentials=False, internet_facing=True,
+                  has_logging=True, has_rate_limiting=False, notes="")
+    add_component(session_id="f1", name="API", type="api",
+                  technology="", auth_type="jwt", stores_pii=False,
+                  stores_credentials=False, internet_facing=False,
+                  has_logging=True, has_rate_limiting=True, notes="")
+    result = add_data_flow(
+        session_id="f1", name="Web->API", source="Web", destination="API",
+        encrypted=True, authenticated=True, crosses_trust_boundary=True,
+        protocol="HTTPS", data_classification="confidential",
+    )
+    data = json.loads(result)
+    assert data["ok"] is True
+    assert data["flow_count"] == 1

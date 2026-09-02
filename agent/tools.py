@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from agent_core import tool
 from agent_core.models import ToolRisk
-from models import ApplicationDescriptor
+from models import ApplicationDescriptor, Component, ComponentType, AuthType, DataFlow
 from .session import get_session, has_session
 
 _VALID_ENVS = {"production", "staging", "development"}
@@ -58,3 +58,57 @@ def set_compliance(session_id: str, frameworks: list[str]) -> str:
         return _err(f"Unknown frameworks: {unknown}. Valid: {sorted(_VALID_FRAMEWORKS)}")
     get_session(session_id)["descriptor"].compliance_frameworks = list(frameworks)
     return _ok(frameworks=frameworks)
+
+
+@tool(description="Add a component to the current session's application. "
+                  "type: web_app|api|database|auth_service|message_queue|cache|storage|"
+                  "cdn|load_balancer|external_service|mobile_app|worker|generic. "
+                  "auth_type: none|api_key|jwt|oauth2|basic|mtls|session.",
+      risk=ToolRisk.NONE)
+def add_component(
+    session_id: str, name: str, type: str, technology: str, auth_type: str,
+    stores_pii: bool, stores_credentials: bool, internet_facing: bool,
+    has_logging: bool, has_rate_limiting: bool, notes: str,
+) -> str:
+    """Add a component to the application descriptor."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    valid_types = {ct.value for ct in ComponentType}
+    if type not in valid_types:
+        return _err(f"Invalid type {type!r}. Valid: {sorted(valid_types)}")
+    valid_auth = {at.value for at in AuthType}
+    if auth_type not in valid_auth:
+        return _err(f"Invalid auth_type {auth_type!r}. Valid: {sorted(valid_auth)}")
+    d = get_session(session_id)["descriptor"]
+    d.components.append(Component(
+        name=name, type=ComponentType(type), technology=technology,
+        auth_type=AuthType(auth_type), stores_pii=stores_pii,
+        stores_credentials=stores_credentials, internet_facing=internet_facing,
+        has_logging=has_logging, has_rate_limiting=has_rate_limiting, notes=notes,
+    ))
+    return _ok(component_count=len(d.components), name=name)
+
+
+@tool(description="Add a data flow between two components. "
+                  "data_classification: public|internal|confidential|restricted. "
+                  "source/destination must reference component names (or Internet/Client/Admin).",
+      risk=ToolRisk.NONE)
+def add_data_flow(
+    session_id: str, name: str, source: str, destination: str,
+    encrypted: bool, authenticated: bool, crosses_trust_boundary: bool,
+    protocol: str, data_classification: str,
+) -> str:
+    """Add a data flow between components."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    if data_classification not in _VALID_DATA_CLASS:
+        return _err(f"Invalid data_classification {data_classification!r}. "
+                    f"Valid: {sorted(_VALID_DATA_CLASS)}")
+    d = get_session(session_id)["descriptor"]
+    d.data_flows.append(DataFlow(
+        name=name, source=source, destination=destination,
+        data_classification=data_classification, encrypted=encrypted,
+        authenticated=authenticated, crosses_trust_boundary=crosses_trust_boundary,
+        protocol=protocol,
+    ))
+    return _ok(flow_count=len(d.data_flows), name=name)
