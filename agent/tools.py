@@ -255,3 +255,16 @@ def generate_report(session_id: str, format: str, output_dir: str) -> str:
     if not written:
         return _err(f"Unknown format {format!r}. Valid: json|html|all.")
     return _ok(files=written, format=format)
+
+
+@tool(description="Ask the human user a single question and return their answer as a string. "
+                  "Use this to gather details about their application: name, components, "
+                  "authentication, data flows, compliance requirements. Ask ONE question at a "
+                  "time; wait for the answer; then decide the next question. Do not batch. "
+                  "The response is the raw user string — parse it yourself.",
+      risk=ToolRisk.NONE)
+def ask_user(question: str) -> str:
+    """Ask the user a single question and return their answer."""
+    print(f"\n🤖 {question}")
+    answer = input("👤 ").strip()
+    return _ok(answer=answer)

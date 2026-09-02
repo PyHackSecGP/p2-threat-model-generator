@@ -7,7 +7,7 @@ from agent.session import reset_session, get_session
 from agent.tools import (
     start_app, set_compliance, add_component, add_data_flow,
     list_components, list_flows, get_app, run_stride_analysis,
-    enrich_threats, score_threats, generate_report,
+    enrich_threats, score_threats, generate_report, ask_user,
 )
 
 
@@ -228,3 +228,18 @@ def test_generate_report_requires_score() -> None:
     data = json.loads(result)
     assert data["ok"] is False
     assert "score_threats" in data["error"]
+
+
+def test_ask_user_returns_input() -> None:
+    with patch("builtins.input", return_value="my-app"):
+        result = ask_user(question="What is the app name?")
+    data = json.loads(result)
+    assert data["ok"] is True
+    assert data["answer"] == "my-app"
+
+
+def test_ask_user_strips_whitespace() -> None:
+    with patch("builtins.input", return_value="  x  "):
+        result = ask_user(question="?")
+    data = json.loads(result)
+    assert data["answer"] == "x"
