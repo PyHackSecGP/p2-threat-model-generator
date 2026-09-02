@@ -112,3 +112,52 @@ def add_data_flow(
         protocol=protocol,
     ))
     return _ok(flow_count=len(d.data_flows), name=name)
+
+
+@tool(description="List all components in the current session's app. "
+                  "Use this when you need to review what's been added before running STRIDE.",
+      risk=ToolRisk.NONE)
+def list_components(session_id: str) -> str:
+    """List all components in the application."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    d = get_session(session_id)["descriptor"]
+    return _ok(components=[{
+        "name": c.name, "type": c.type.value, "technology": c.technology,
+        "auth_type": c.auth_type.value, "stores_pii": c.stores_pii,
+        "stores_credentials": c.stores_credentials,
+        "internet_facing": c.internet_facing,
+        "has_logging": c.has_logging, "has_rate_limiting": c.has_rate_limiting,
+    } for c in d.components])
+
+
+@tool(description="List all data flows in the current session's app.",
+      risk=ToolRisk.NONE)
+def list_flows(session_id: str) -> str:
+    """List all data flows in the application."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    d = get_session(session_id)["descriptor"]
+    return _ok(flows=[{
+        "name": f.name, "source": f.source, "destination": f.destination,
+        "encrypted": f.encrypted, "authenticated": f.authenticated,
+        "crosses_trust_boundary": f.crosses_trust_boundary,
+        "protocol": f.protocol, "data_classification": f.data_classification,
+    } for f in d.data_flows])
+
+
+@tool(description="Summarize the current app: name, env, component_count, flow_count, "
+                  "compliance frameworks.",
+      risk=ToolRisk.NONE)
+def get_app(session_id: str) -> str:
+    """Get a summary of the current application."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    d = get_session(session_id)["descriptor"]
+    return _ok(
+        name=d.name, version=d.version, environment=d.environment,
+        internet_facing=d.internet_facing,
+        data_classification=d.data_classification,
+        component_count=len(d.components), flow_count=len(d.data_flows),
+        compliance_frameworks=list(d.compliance_frameworks),
+    )

@@ -2,7 +2,10 @@
 from __future__ import annotations
 import json
 from agent.session import reset_session, get_session
-from agent.tools import start_app, set_compliance, add_component, add_data_flow
+from agent.tools import (
+    start_app, set_compliance, add_component, add_data_flow,
+    list_components, list_flows, get_app,
+)
 
 
 def test_start_app_creates_descriptor() -> None:
@@ -109,3 +112,31 @@ def test_add_data_flow_ok() -> None:
     data = json.loads(result)
     assert data["ok"] is True
     assert data["flow_count"] == 1
+
+
+def test_list_components_empty() -> None:
+    _start("l1")
+    result = list_components(session_id="l1")
+    data = json.loads(result)
+    assert data["ok"] is True
+    assert data["components"] == []
+
+
+def test_list_components_populated() -> None:
+    _start("l2")
+    add_component(session_id="l2", name="X", type="api",
+                  technology="", auth_type="none", stores_pii=True,
+                  stores_credentials=False, internet_facing=True,
+                  has_logging=True, has_rate_limiting=False, notes="")
+    data = json.loads(list_components(session_id="l2"))
+    assert data["components"][0]["name"] == "X"
+    assert data["components"][0]["stores_pii"] is True
+
+
+def test_get_app_returns_summary() -> None:
+    _start("g1")
+    data = json.loads(get_app(session_id="g1"))
+    assert data["ok"] is True
+    assert data["name"] == "A"
+    assert data["component_count"] == 0
+    assert data["flow_count"] == 0
