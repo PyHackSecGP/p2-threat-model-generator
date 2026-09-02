@@ -38,6 +38,27 @@ def _detect_input_type(path: str) -> str:
     return "yaml"
 
 
+def _run_agentic(args) -> int:
+    """Dispatch to the agentic wizard. Returns exit code."""
+    from agent import ThreatModelAgent
+    from agent_core.llm import get_provider
+
+    describe = args.describe
+    if args.describe_file:
+        with open(args.describe_file, "r", encoding="utf-8") as f:
+            describe = f.read()
+
+    provider = get_provider(provider=args.provider)
+    agent = ThreatModelAgent(provider=provider)
+    result = agent.run(describe=describe, output_dir=args.output)
+    print("\n" + "=" * 60)
+    print(f"Agent finished. Stop reason: {result.stop_reason.value}")
+    print(f"Iterations: {result.iterations}")
+    print("=" * 60)
+    print(result.output)
+    return 0 if result.stop_reason.value == "done" else 1
+
+
 def _load_app(args):
     if args.wizard:
         from parsers.wizard import run_wizard
@@ -96,7 +117,27 @@ Examples:
     parser.add_argument("--wizard", action="store_true", help="Run interactive wizard instead of file input")
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM narrative generation")
     parser.add_argument("--llm-max", type=int, default=10, help="Max threats to enrich with LLM (default: 10)")
+    parser.add_argument(
+        "--agentic", action="store_true",
+        help="Run in agentic mode: LLM-driven interactive wizard using agent-core.",
+    )
+    parser.add_argument(
+        "--provider", choices=["claude", "ollama"], default="",
+        help="LLM provider for agentic mode. Default: AGENT_PROVIDER env var or ollama.",
+    )
+    parser.add_argument(
+        "--describe", default="",
+        help="Seed application description for the agent (agentic mode only).",
+    )
+    parser.add_argument(
+        "--describe-file", default="",
+        help="Read seed application description from a file (agentic mode only).",
+    )
     args = parser.parse_args()
+
+    # Agentic dispatch
+    if args.agentic:
+        sys.exit(_run_agentic(args))
 
     # Load application descriptor
     print("[*] Loading application descriptor...")
