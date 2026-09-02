@@ -5,6 +5,7 @@ from agent_core import tool
 from agent_core.models import ToolRisk
 from models import ApplicationDescriptor, Component, ComponentType, AuthType, DataFlow
 from .session import get_session, has_session
+from engine.stride import run_stride
 
 _VALID_ENVS = {"production", "staging", "development"}
 _VALID_DATA_CLASS = {"public", "internal", "confidential", "restricted"}
@@ -161,3 +162,21 @@ def get_app(session_id: str) -> str:
         component_count=len(d.components), flow_count=len(d.data_flows),
         compliance_frameworks=list(d.compliance_frameworks),
     )
+
+
+@tool(description="Run the STRIDE rule engine on the current session's app. "
+                  "Generates threats for every component + data flow. "
+                  "Call this only after start_app + all add_component + add_data_flow calls.",
+      risk=ToolRisk.NONE)
+def run_stride_analysis(session_id: str) -> str:
+    """Run STRIDE analysis on the current application."""
+    if not has_session(session_id):
+        return _err("No descriptor. Call start_app first.")
+    state = get_session(session_id)
+    d = state["descriptor"]
+    threats = run_stride(d)
+    state["threats"] = threats
+    counts: dict[str, int] = {}
+    for t in threats:
+        counts[t.stride_category.value] = counts.get(t.stride_category.value, 0) + 1
+    return _ok(threat_count=len(threats), stride_counts=counts)

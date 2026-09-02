@@ -4,7 +4,7 @@ import json
 from agent.session import reset_session, get_session
 from agent.tools import (
     start_app, set_compliance, add_component, add_data_flow,
-    list_components, list_flows, get_app,
+    list_components, list_flows, get_app, run_stride_analysis,
 )
 
 
@@ -140,3 +140,24 @@ def test_get_app_returns_summary() -> None:
     assert data["name"] == "A"
     assert data["component_count"] == 0
     assert data["flow_count"] == 0
+
+
+def test_run_stride_populates_threats() -> None:
+    _start("st1")
+    add_component(session_id="st1", name="API", type="api",
+                  technology="FastAPI", auth_type="none", stores_pii=True,
+                  stores_credentials=False, internet_facing=True,
+                  has_logging=False, has_rate_limiting=False, notes="")
+    result = run_stride_analysis(session_id="st1")
+    data = json.loads(result)
+    assert data["ok"] is True
+    assert data["threat_count"] > 0
+    threats = get_session("st1")["threats"]
+    assert len(threats) > 0
+    assert all(hasattr(t, "stride_category") for t in threats)
+
+
+def test_run_stride_needs_descriptor() -> None:
+    reset_session("st2")
+    data = json.loads(run_stride_analysis(session_id="st2"))
+    assert data["ok"] is False
