@@ -136,6 +136,46 @@ Teams can gate PRs on risk score threshold. Same as gating on test failures, but
 
 ---
 
+## Q: You mentioned an agentic mode — what's the difference from the scripted pipeline?
+
+The scripted flow assumes I have a machine-readable input file — docker-compose, OpenAPI, k8s manifests. Real threat-modelling conversations don't start with those files. They start with a whiteboard and a developer explaining what the system is.
+
+The agentic mode replaces the scripted `parsers/wizard.py` with an LLM-driven interviewer. Under the hood it's `agent-core` — a small Anthropic/Ollama harness — orchestrating 12 tools:
+
+| Tool | Purpose |
+|---|---|
+| `ask_user` | Ask the user one question and read the answer from stdin |
+| `start_app` | Initialise the `ApplicationDescriptor` |
+| `set_compliance` | Attach GDPR/PCI/SOC2/HIPAA flags |
+| `add_component` / `add_data_flow` | Build up the model incrementally |
+| `list_components` / `list_flows` / `get_app` | Inspection so the agent can review its own progress |
+| `run_stride_analysis` | Same STRIDE engine as the scripted path |
+| `enrich_threats` | Optional Ollama narrative pass |
+| `score_threats` | Same scorer + compliance mapping |
+| `generate_report` | Same JSON + HTML reporters |
+
+The engine, scorer, and reporters are shared between both modes — the agentic layer is purely a different way of *populating* the descriptor.
+
+**Why bother:** it lets a non-security-engineer answer plain questions ("what does the service store?") and get a scored threat model without ever touching YAML. It also lets me test how well a general-purpose LLM can drive a domain-specific STRIDE workflow when the reasoning is offloaded to deterministic tools.
+
+Run it:
+
+```bash
+# Interactive Claude interview
+python p2_threat_model.py --agentic --provider claude
+
+# Seeded with a description
+python p2_threat_model.py --agentic --provider claude \
+    --describe "FastAPI backend, Postgres, public login endpoint, stores PII"
+
+# From a file
+python p2_threat_model.py --agentic --describe-file architecture.md
+```
+
+Reports land in `./output/` (or whatever `--output` you pass).
+
+---
+
 ## Q: What would you improve or add next?
 
 - **Terraform / HCL parser** — model cloud infrastructure (IAM policies, S3 bucket ACLs, security groups) — this is where most real cloud risk lives
