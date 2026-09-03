@@ -246,7 +246,6 @@ def generate_html(tm: ThreatModel, output_path: str) -> None:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Threat Model — {app.name}</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {{
     --bg: #0d0d0d; --bg2: #141414; --bg3: #1a1a1a;

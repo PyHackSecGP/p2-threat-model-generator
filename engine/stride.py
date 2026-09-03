@@ -27,6 +27,7 @@ MITRE = {
     "T1574": _M("T1574", "Hijack Execution Flow", "Privilege Escalation", "https://attack.mitre.org/techniques/T1574/"),
     "T1046": _M("T1046", "Network Service Discovery", "Discovery", "https://attack.mitre.org/techniques/T1046/"),
     "T1595": _M("T1595", "Active Scanning", "Reconnaissance", "https://attack.mitre.org/techniques/T1595/"),
+    "T1195": _M("T1195", "Supply Chain Compromise", "Initial Access", "https://attack.mitre.org/techniques/T1195/"),
 }
 
 # ── OWASP 2021 quick-ref ──────────────────────────────────────────────────────
@@ -355,6 +356,302 @@ def generate_component_threats(c: Component, idx: int) -> list[Threat]:
             owasp_mappings=[OWASP["A01"]],
             nist_controls=[NIST["AC-6"], NIST["AC-2"]],
             remediation_effort="High",
+        ))
+
+    # ── CACHE ─────────────────────────────────────────────────────────────────
+    if ct == ComponentType.CACHE:
+        threats.append(Threat(
+            id=tid(), title=f"Cache Poisoning — {c.name}",
+            stride_category=StrideCategory.TAMPERING, component=c.name,
+            description=f"Attacker injects malicious entries into {c.name}, causing the application "
+                        "to serve corrupted or attacker-controlled data to all users who hit the cache.",
+            attack_vector="Unauthenticated cache write access, HTTP response splitting, cache key confusion.",
+            business_impact="Mass data corruption served to all users. Attacker can poison auth tokens, "
+                            "session data, or API responses affecting every cached request.",
+            likelihood=2 + _internet_boost(c), impact=4,
+            mitigations=[
+                "Require authentication (password/TLS) for all cache connections — no unauthenticated Redis.",
+                "Use namespaced, hard-to-guess cache keys — never derived directly from user input.",
+                "Set short TTLs on sensitive cached data; purge on security-relevant events.",
+            ],
+            mitre_mappings=[MITRE["T1565"]],
+            owasp_mappings=[OWASP["A04"]],
+            nist_controls=[NIST["SC-8"], NIST["SI-10"]],
+            remediation_effort="Medium",
+        ))
+        if c.stores_pii or c.stores_credentials:
+            threats.append(Threat(
+                id=tid(), title=f"Sensitive Data in Cache — {c.name}",
+                stride_category=StrideCategory.INFO_DISCLOSURE, component=c.name,
+                description=f"{c.name} holds sensitive data in-memory. A cache dump or memory "
+                            "forensics attack exposes plaintext credentials or PII.",
+                attack_vector="Redis KEYS * dump, memory forensics, persistence file (.rdb) exfiltration.",
+                business_impact="Full credential or PII exposure. GDPR breach trigger. "
+                                "Credential dump enables lateral movement across all systems.",
+                likelihood=2, impact=5,
+                mitigations=[
+                    "Never cache raw credentials or unmasked PII.",
+                    "Enable Redis AUTH and TLS; disable persistence (save '') for session stores.",
+                    "Encrypt sensitive fields before caching; store only encrypted blobs.",
+                ],
+                mitre_mappings=[MITRE["T1552"], MITRE["T1213"]],
+                owasp_mappings=[OWASP["A02"]],
+                nist_controls=[NIST["SC-28"]],
+                remediation_effort="Medium",
+            ))
+
+    # ── MESSAGE QUEUE ─────────────────────────────────────────────────────────
+    if ct == ComponentType.MESSAGE_QUEUE:
+        threats.append(Threat(
+            id=tid(), title=f"Message Injection / Replay — {c.name}",
+            stride_category=StrideCategory.TAMPERING, component=c.name,
+            description=f"Unauthenticated producers inject malicious messages into {c.name}, "
+                        "or replay captured messages to trigger duplicate or out-of-order processing.",
+            attack_vector="Unauthenticated broker access, SSRF to internal broker, captured message replay.",
+            business_impact="Malicious commands executed by consumers, duplicate financial transactions, "
+                            "state corruption in downstream services.",
+            likelihood=2 + _internet_boost(c), impact=4,
+            mitigations=[
+                "Require SASL/TLS authentication for all producers and consumers.",
+                "Implement message signing (HMAC) to detect tampered payloads.",
+                "Assign per-service ACLs — producers cannot consume, consumers cannot produce to other topics.",
+                "Include idempotency keys and timestamps; reject replays outside allowed window.",
+            ],
+            mitre_mappings=[MITRE["T1565"], MITRE["T1078"]],
+            owasp_mappings=[OWASP["A08"]],
+            nist_controls=[NIST["IA-2"], NIST["SC-8"]],
+            remediation_effort="Medium",
+        ))
+        threats.append(Threat(
+            id=tid(), title=f"Queue Flooding / DoS — {c.name}",
+            stride_category=StrideCategory.DENIAL_OF_SERVICE, component=c.name,
+            description=f"Attacker floods {c.name} with high-volume or oversized messages, "
+                        "exhausting broker memory/disk and starving legitimate consumers.",
+            attack_vector="Unauthenticated producer publishing, compromised internal service.",
+            business_impact="All downstream consumers blocked; async pipeline halted. "
+                            "Cascading failure across all services consuming from the broker.",
+            likelihood=2, impact=4,
+            mitigations=[
+                "Set per-producer publish rate limits and max message size limits at the broker.",
+                "Configure broker disk/memory quotas per topic/queue.",
+                "Monitor consumer lag; alert when lag exceeds SLA threshold.",
+            ],
+            mitre_mappings=[MITRE["T1499"]],
+            owasp_mappings=[OWASP["A04"]],
+            nist_controls=[NIST["CP-10"]],
+            remediation_effort="Medium",
+        ))
+
+    # ── LOAD BALANCER ─────────────────────────────────────────────────────────
+    if ct == ComponentType.LOAD_BALANCER:
+        threats.append(Threat(
+            id=tid(), title=f"Header Injection / IP Spoofing — {c.name}",
+            stride_category=StrideCategory.SPOOFING, component=c.name,
+            description=f"Attacker manipulates X-Forwarded-For or X-Real-IP headers at {c.name}, "
+                        "causing backend services to trust a spoofed source IP for rate limiting, "
+                        "geo-blocking, or access control decisions.",
+            attack_vector="Direct backend access bypassing the LB, crafted headers on LB-facing requests.",
+            business_impact="Rate limit bypass, IP allowlist evasion, false attribution in audit logs. "
+                            "Attacker accesses geo-restricted resources or bypasses IP-based MFA.",
+            likelihood=2 + _internet_boost(c), impact=3,
+            mitigations=[
+                "Strip and re-set X-Forwarded-For at the LB — never trust client-supplied values.",
+                "Block direct backend access — all traffic must route through the LB.",
+                "Use signed request headers for LB-to-backend service authentication.",
+            ],
+            mitre_mappings=[MITRE["T1078"], MITRE["T1190"]],
+            owasp_mappings=[OWASP["A05"]],
+            nist_controls=[NIST["SC-8"], NIST["AC-17"]],
+            remediation_effort="Low",
+        ))
+        threats.append(Threat(
+            id=tid(), title=f"TLS Termination Plaintext Exposure — {c.name}",
+            stride_category=StrideCategory.INFO_DISCLOSURE, component=c.name,
+            description=f"{c.name} terminates TLS and forwards plaintext to backends. "
+                        "An attacker with access to the internal network can capture all decrypted traffic.",
+            attack_vector="Internal network interception, ARP poisoning between LB and backend services.",
+            business_impact="Full plaintext exposure of all user traffic, including credentials and PII, "
+                            "between the load balancer and backend services.",
+            likelihood=2, impact=4,
+            mitigations=[
+                "Re-encrypt LB-to-backend traffic (end-to-end TLS or mTLS).",
+                "Segment the backend network; restrict LB-to-backend traffic to a dedicated VLAN.",
+            ],
+            mitre_mappings=[MITRE["T1552"]],
+            owasp_mappings=[OWASP["A02"]],
+            nist_controls=[NIST["SC-8"]],
+            remediation_effort="Medium",
+        ))
+
+    # ── CDN ───────────────────────────────────────────────────────────────────
+    if ct == ComponentType.CDN:
+        threats.append(Threat(
+            id=tid(), title=f"CDN Cache Poisoning — {c.name}",
+            stride_category=StrideCategory.TAMPERING, component=c.name,
+            description=f"Attacker exploits cache key ambiguity or unkeyed headers at {c.name} "
+                        "to poison cached responses, serving malicious content globally to all edge users.",
+            attack_vector="HTTP request smuggling, unkeyed header injection (X-Forwarded-Host), "
+                          "cache deception via path confusion.",
+            business_impact="Malicious responses served globally at CDN scale. "
+                            "XSS payload delivery or credential-harvesting pages to all users.",
+            likelihood=2, impact=4,
+            mitigations=[
+                "Include all security-relevant headers in the CDN cache key.",
+                "Normalise and strip ambiguous request headers at the CDN edge.",
+                "Monitor for unexpected response size or content-type changes in cached objects.",
+            ],
+            mitre_mappings=[MITRE["T1565"], MITRE["T1190"]],
+            owasp_mappings=[OWASP["A05"]],
+            nist_controls=[NIST["SC-8"], NIST["SI-10"]],
+            remediation_effort="Medium",
+        ))
+        threats.append(Threat(
+            id=tid(), title=f"Private Content Served via CDN — {c.name}",
+            stride_category=StrideCategory.INFO_DISCLOSURE, component=c.name,
+            description=f"Misconfigured caching rules at {c.name} cause authenticated or private content "
+                        "to be cached and served to unauthenticated users.",
+            attack_vector="Missing Vary/Cache-Control headers; CDN caching authenticated API responses.",
+            business_impact="User PII, session data, or proprietary content served publicly. "
+                            "GDPR breach trigger. Mass data exposure at CDN edge scale.",
+            likelihood=2, impact=4,
+            mitigations=[
+                "Set Cache-Control: no-store on all authenticated or personalised responses.",
+                "Configure CDN to respect Vary: Authorization; never cache responses with Set-Cookie.",
+                "Audit CDN cache rules quarterly; probe with unauthenticated requests against private endpoints.",
+            ],
+            mitre_mappings=[MITRE["T1530"]],
+            owasp_mappings=[OWASP["A01"]],
+            nist_controls=[NIST["AC-6"], NIST["SC-28"]],
+            remediation_effort="Low",
+        ))
+
+    # ── EXTERNAL SERVICE ──────────────────────────────────────────────────────
+    if ct == ComponentType.EXTERNAL_SERVICE:
+        threats.append(Threat(
+            id=tid(), title=f"Supply Chain Compromise — {c.name}",
+            stride_category=StrideCategory.TAMPERING, component=c.name,
+            description=f"Third-party service {c.name} is compromised or returns malicious payloads. "
+                        "Implicit trust in external responses propagates attacker-controlled data into internal systems.",
+            attack_vector="Vendor breach, BGP hijack, DNS poisoning redirecting to attacker-controlled endpoint.",
+            business_impact="Attacker-controlled data executed within internal systems via a trusted dependency. "
+                            "Similar breach vector to SolarWinds; full compromise possible.",
+            likelihood=2, impact=4,
+            mitigations=[
+                "Validate and sanitise all external API responses — never treat them as trusted internal data.",
+                "Pin TLS certificates for critical external dependencies; alert on certificate changes.",
+                "Implement circuit breakers: fail safe if external service behaves anomalously.",
+                "Monitor vendor security advisories; maintain a documented vendor-breach response plan.",
+            ],
+            mitre_mappings=[MITRE["T1195"], MITRE["T1574"]],
+            owasp_mappings=[OWASP["A08"]],
+            nist_controls=[NIST["SI-2"], NIST["SC-8"]],
+            remediation_effort="Medium",
+        ))
+        if c.stores_pii:
+            threats.append(Threat(
+                id=tid(), title=f"PII Transmitted to Third Party — {c.name}",
+                stride_category=StrideCategory.INFO_DISCLOSURE, component=c.name,
+                description=f"PII or sensitive data is transmitted to external service {c.name}. "
+                            "GDPR data processor obligations apply once data leaves the trust boundary.",
+                attack_vector="Oversharing in API request bodies, external service logging of PII fields.",
+                business_impact="GDPR Art. 28 obligations triggered. Third-party breach exposes your users' data. "
+                                "Loss of data residency control. Fines up to 4% global turnover.",
+                likelihood=3, impact=4,
+                mitigations=[
+                    "Data minimisation: send only the minimum fields required by the external API.",
+                    "Ensure a signed DPA (Data Processing Agreement) exists with all PII-processing vendors.",
+                    "Audit outbound request bodies in staging; redact PII fields in external service logs.",
+                ],
+                mitre_mappings=[MITRE["T1213"]],
+                owasp_mappings=[OWASP["A01"]],
+                nist_controls=[NIST["AC-6"], NIST["SC-28"]],
+                remediation_effort="Low",
+            ))
+
+    # ── MOBILE APP ────────────────────────────────────────────────────────────
+    if ct == ComponentType.MOBILE_APP:
+        threats.append(Threat(
+            id=tid(), title=f"Certificate Pinning Bypass — {c.name}",
+            stride_category=StrideCategory.SPOOFING, component=c.name,
+            description=f"Attacker intercepts {c.name} traffic by bypassing certificate pinning via "
+                        "Frida/Objection or custom CA install, enabling MitM interception of all API calls.",
+            attack_vector="Rooted/jailbroken device, Frida dynamic instrumentation, custom CA injection.",
+            business_impact="Full plaintext interception of all API traffic including credentials and session tokens. "
+                            "Attacker can replay or modify requests on behalf of any user.",
+            likelihood=2 + _internet_boost(c), impact=4,
+            mitigations=[
+                "Implement certificate pinning with multi-pin backup via network_security_config (Android) "
+                "or NSAppTransportSecurity (iOS).",
+                "Detect rooted/jailbroken devices at runtime; block or warn before sensitive operations.",
+                "Obfuscate pinning logic; rotate pins via remote config with short validity windows.",
+            ],
+            mitre_mappings=[MITRE["T1552"], MITRE["T1539"]],
+            owasp_mappings=[OWASP["A02"]],
+            nist_controls=[NIST["SC-8"], NIST["IA-2"]],
+            remediation_effort="Medium",
+        ))
+        threats.append(Threat(
+            id=tid(), title=f"Insecure Local Storage — {c.name}",
+            stride_category=StrideCategory.INFO_DISCLOSURE, component=c.name,
+            description=f"{c.name} may store session tokens, credentials, or PII in plaintext "
+                        "in local storage, SQLite databases, or SharedPreferences.",
+            attack_vector="Physical device access, ADB backup extraction, "
+                          "malicious app with READ_EXTERNAL_STORAGE permission.",
+            business_impact="Credential theft from physical device access. Mass account takeover "
+                            "if device is lost, stolen, or submitted for repair.",
+            likelihood=2 + _pii_boost(c), impact=4,
+            mitigations=[
+                "Use Android Keystore / iOS Keychain for all credentials and tokens — never SharedPreferences.",
+                "Encrypt SQLite databases with SQLCipher.",
+                "Disable Android backup for sensitive app data (android:allowBackup=\"false\").",
+            ],
+            mitre_mappings=[MITRE["T1552"], MITRE["T1213"]],
+            owasp_mappings=[OWASP["A02"]],
+            nist_controls=[NIST["SC-28"]],
+            remediation_effort="Medium",
+        ))
+
+    # ── WORKER ────────────────────────────────────────────────────────────────
+    if ct == ComponentType.WORKER:
+        threats.append(Threat(
+            id=tid(), title=f"Malicious Job Injection — {c.name}",
+            stride_category=StrideCategory.TAMPERING, component=c.name,
+            description=f"Attacker injects malicious payloads into jobs consumed by {c.name}, "
+                        "exploiting unsanitised job arguments to achieve RCE or data corruption.",
+            attack_vector="Compromised job producer, unauthenticated queue access, "
+                          "SSRF triggering internal job enqueue endpoints.",
+            business_impact="Remote code execution in the worker environment. "
+                            "If the worker holds elevated permissions (DB admin, cloud IAM), full system compromise.",
+            likelihood=2, impact=4 + _internet_boost(c),
+            mitigations=[
+                "Validate and sanitise all job payload fields before processing — treat as untrusted input.",
+                "Run workers with least-privilege service accounts; no interactive login capability.",
+                "Authenticate job producers; reject jobs from unauthenticated sources.",
+            ],
+            mitre_mappings=[MITRE["T1059"], MITRE["T1548"]],
+            owasp_mappings=[OWASP["A03"], OWASP["A01"]],
+            nist_controls=[NIST["SI-10"], NIST["AC-6"]],
+            remediation_effort="Medium",
+        ))
+        threats.append(Threat(
+            id=tid(), title=f"Worker Privilege Escalation — {c.name}",
+            stride_category=StrideCategory.ELEVATION_OF_PRIVILEGE, component=c.name,
+            description=f"{c.name} processes background jobs, often with elevated permissions to access "
+                        "databases, cloud APIs, or file systems. Compromise grants attacker those permissions.",
+            attack_vector="Deserialization vulnerability in job payload, dependency confusion in worker image, "
+                          "insecure job parameter handling.",
+            business_impact="Attacker inherits all permissions of the worker process — "
+                            "potentially DB admin, cloud IAM, or file system write access across the system.",
+            likelihood=2, impact=4,
+            mitigations=[
+                "Scope worker IAM roles to minimum required — read-only where possible.",
+                "Run each worker type in an isolated container with no shared credentials.",
+                "Use AWS IAM task roles / Kubernetes service accounts scoped per worker type.",
+            ],
+            mitre_mappings=[MITRE["T1548"], MITRE["T1574"]],
+            owasp_mappings=[OWASP["A01"]],
+            nist_controls=[NIST["AC-6"], NIST["IA-2"]],
+            remediation_effort="Medium",
         ))
 
     return threats

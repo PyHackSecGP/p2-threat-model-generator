@@ -17,6 +17,7 @@ from engine.scorer import build_threat_model
 from engine.llm import enrich_all, is_ollama_available
 from reporter.html_reporter import generate_html
 from reporter.json_reporter import generate_json
+from reporter.sarif_reporter import generate_sarif
 
 
 def _detect_input_type(path: str) -> str:
@@ -133,6 +134,10 @@ Examples:
         "--describe-file", default="",
         help="Read seed application description from a file (agentic mode only).",
     )
+    parser.add_argument(
+        "--sarif", metavar="FILE", default="",
+        help="Write SARIF 2.1.0 report to FILE (GitHub Security / DefectDojo compatible).",
+    )
     args = parser.parse_args()
 
     # Agentic dispatch
@@ -182,6 +187,12 @@ Examples:
 
     print(f"[*] Writing JSON export → {json_path}")
     generate_json(tm, str(json_path))
+
+    if args.sarif:
+        sarif_path = Path(args.sarif)
+        sarif_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[*] Writing SARIF 2.1.0 → {sarif_path}")
+        generate_sarif(tm, str(sarif_path))
 
     print(f"\n[✓] Done.")
     print(f"    HTML report : {html_path.resolve()}")

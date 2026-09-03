@@ -11,6 +11,7 @@ from engine.llm import enrich_all
 from engine.scorer import build_threat_model
 from reporter.json_reporter import generate_json
 from reporter.html_reporter import generate_html
+from reporter.sarif_reporter import generate_sarif
 
 _VALID_ENVS = {"production", "staging", "development"}
 _VALID_DATA_CLASS = {"public", "internal", "confidential", "restricted"}
@@ -232,7 +233,8 @@ def score_threats(session_id: str) -> str:
 
 
 @tool(description="Write threat-model report file(s) to output_dir. "
-                  "format: json|html|all. Requires score_threats to have been called first.",
+                  "format: json|html|sarif|all. Requires score_threats to have been called first. "
+                  "sarif produces SARIF 2.1.0 compatible with GitHub Security tab and DefectDojo.",
       risk=ToolRisk.FILESYSTEM)
 def generate_report(session_id: str, format: str, output_dir: str) -> str:
     """Generate threat-model report in the specified format."""
@@ -252,8 +254,12 @@ def generate_report(session_id: str, format: str, output_dir: str) -> str:
         path = os.path.join(output_dir, f"{slug}-threat-model.html")
         generate_html(tm, path)
         written.append(path)
+    if format in ("sarif", "all"):
+        path = os.path.join(output_dir, f"{slug}-threat-model.sarif")
+        generate_sarif(tm, path)
+        written.append(path)
     if not written:
-        return _err(f"Unknown format {format!r}. Valid: json|html|all.")
+        return _err(f"Unknown format {format!r}. Valid: json|html|sarif|all.")
     return _ok(files=written, format=format)
 
 
