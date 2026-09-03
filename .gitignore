@@ -6,3 +6,4 @@ output/*.json
 !sample_output/
 *.egg-info/
 .DS_Store
+docs/superpowers/
