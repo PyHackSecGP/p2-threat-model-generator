@@ -211,3 +211,45 @@ Running on `examples/k8s-webapp.yaml`:
 - **DefectDojo push** — send findings via API to a vuln management platform
 - **Diff mode** — compare two threat models to show what changed between versions
 - **SARIF output** — import findings into GitHub Security tab
+
+---
+
+## Appendix: Agentic Mode
+
+The scripted pipeline works well when the caller has a machine-readable input file. In practice, most design-review conversations start with a verbal description — a developer explaining the system on a call, or a rough architecture diagram, not a committed docker-compose. The agentic mode addresses that gap by replacing `parsers/wizard.py` with an LLM-driven interviewer that extracts the same `ApplicationDescriptor` through a structured conversation.
+
+### Architecture
+
+The agentic layer sits in the `agent/` module and is built on `agent-core`, a thin Anthropic/Ollama harness that handles provider switching, tool dispatch, and turn-loop management. The module has three parts:
+
+- **`agent/tools.py`** — 12 `@tool`-decorated functions that form the agent's action space. Each tool wraps an existing subsystem (parser, engine, scorer, reporter) or controls I/O (`ask_user`). The tools are the only things the LLM is allowed to call; all business logic stays in the deterministic layers.
+- **`agent/session.py`** — a module-level `_STORE: dict[str, SessionState]` that threads state through the conversation. `SessionState` holds the in-progress `ApplicationDescriptor`, the raw threat list after STRIDE analysis, and the final `ThreatModel` after scoring. Tools read and write this store by session ID, so the agent can inspect its own progress at any point.
+- **`agent/threat_model_agent.py`** — the `ThreatModelAgent` wrapper class that owns the agent-core client, constructs the system prompt, registers the tool set, and runs the turn loop up to `max_iterations` (default 60). It returns the final `ThreatModel` when the agent calls `generate_report`, or raises if the loop exhausts.
+
+### Execution Policy
+
+The agent runs under `ExecutionPolicy.SAFE`. This permits `ToolRisk.NONE` (read/inspect tools, the STRIDE engine, the scorer) and `ToolRisk.FILESYSTEM` (needed for `generate_report` to write HTML and JSON to disk). It blocks execution-class tools — there are none in this tool set, but the policy is explicit so it cannot silently expand as the tool list grows.
+
+### Session Store Design
+
+I chose a module-level dict over a database or file-backed store deliberately. The agentic session is ephemeral: it starts when the user runs the CLI and ends when the report is written. There is no need for persistence between processes, and a lightweight dict makes the session state fully inspectable in tests without mocking a database. If multi-user or persistent sessions were needed, the `SessionState` dataclass could be serialised to JSON and stored anywhere — the interface stays the same.
+
+### Testing
+
+The test suite covers the agentic layer across three files:
+
+- **`tests/test_agent_tools.py`** — unit tests for individual tools. Each tool is called directly with a seeded session store; the provider is never invoked.
+- **`tests/test_threat_model_agent.py`** — tests for the `ThreatModelAgent` class with a mock provider that returns pre-scripted tool call sequences. Validates that the wrapper correctly registers tools, runs the loop, and surfaces the final model.
+- **`tests/test_agent_smoke.py`** — end-to-end smoke test that runs a minimal agent session (mock provider, no LLM calls) from `start_app` through `generate_report` and verifies the output files exist.
+
+All 8 agent tests run without network access. Live end-to-end tests against the real Claude API are manual — they require a key and cost money, so they stay out of CI.
+
+### Design Decision: `ask_user` Over Batch Extraction
+
+An alternative approach would be to ask the user for a free-form paragraph describing the architecture and then have the LLM extract all components in one shot. I rejected this because it produces hallucinated components — the model fills gaps in the description with plausible-sounding services that were never mentioned. The `ask_user` tool forces turn-by-turn conversation: the agent must explicitly ask for each piece of information it needs, and the user's answer is the ground truth. It is slower but the resulting descriptor is grounded in what the user actually said.
+
+### Cost and Performance Tradeoff
+
+An interactive session typically takes 20-60 agent turns to cover a non-trivial system — name, components, data flows, compliance scope, report generation. With Claude Sonnet, that runs to roughly $0.15–0.25 per session depending on model and context length. With a local Ollama model the cost is zero but latency per turn is higher (5-15 seconds on the homelab GPU versus ~1 second on Claude). For personal and homelab use, Ollama is the default. The `--provider claude` flag is there for cases where response quality matters more than cost.
+
+The 60-iteration cap exists to prevent runaway sessions if the agent gets confused. In practice, well-scoped systems finish in 25-35 turns.

@@ -17,6 +17,7 @@ from engine.scorer import build_threat_model
 from engine.llm import enrich_all, is_ollama_available
 from reporter.html_reporter import generate_html
 from reporter.json_reporter import generate_json
+from reporter.sarif_reporter import generate_sarif
 
 
 def _detect_input_type(path: str) -> str:
@@ -36,6 +37,27 @@ def _detect_input_type(path: str) -> str:
             return "k8s"
         return "yaml"
     return "yaml"
+
+
+def _run_agentic(args) -> int:
+    """Dispatch to the agentic wizard. Returns exit code."""
+    from agent import ThreatModelAgent
+    from agent_core.llm import get_provider
+
+    describe = args.describe
+    if args.describe_file:
+        with open(args.describe_file, "r", encoding="utf-8") as f:
+            describe = f.read()
+
+    provider = get_provider(provider=args.provider)
+    agent = ThreatModelAgent(provider=provider)
+    result = agent.run(describe=describe, output_dir=args.output)
+    print("\n" + "=" * 60)
+    print(f"Agent finished. Stop reason: {result.stop_reason.value}")
+    print(f"Iterations: {result.iterations}")
+    print("=" * 60)
+    print(result.output)
+    return 0 if result.stop_reason.value == "done" else 1
 
 
 def _load_app(args):
@@ -96,7 +118,31 @@ Examples:
     parser.add_argument("--wizard", action="store_true", help="Run interactive wizard instead of file input")
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM narrative generation")
     parser.add_argument("--llm-max", type=int, default=10, help="Max threats to enrich with LLM (default: 10)")
+    parser.add_argument(
+        "--agentic", action="store_true",
+        help="Run in agentic mode: LLM-driven interactive wizard using agent-core.",
+    )
+    parser.add_argument(
+        "--provider", choices=["claude", "ollama"], default="",
+        help="LLM provider for agentic mode. Default: AGENT_PROVIDER env var or ollama.",
+    )
+    parser.add_argument(
+        "--describe", default="",
+        help="Seed application description for the agent (agentic mode only).",
+    )
+    parser.add_argument(
+        "--describe-file", default="",
+        help="Read seed application description from a file (agentic mode only).",
+    )
+    parser.add_argument(
+        "--sarif", metavar="FILE", default="",
+        help="Write SARIF 2.1.0 report to FILE (GitHub Security / DefectDojo compatible).",
+    )
     args = parser.parse_args()
+
+    # Agentic dispatch
+    if args.agentic:
+        sys.exit(_run_agentic(args))
 
     # Load application descriptor
     print("[*] Loading application descriptor...")
@@ -141,6 +187,12 @@ Examples:
 
     print(f"[*] Writing JSON export → {json_path}")
     generate_json(tm, str(json_path))
+
+    if args.sarif:
+        sarif_path = Path(args.sarif)
+        sarif_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[*] Writing SARIF 2.1.0 → {sarif_path}")
+        generate_sarif(tm, str(sarif_path))
 
     print(f"\n[✓] Done.")
     print(f"    HTML report : {html_path.resolve()}")

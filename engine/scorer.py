@@ -69,12 +69,16 @@ def compute_compliance_flags(app: ApplicationDescriptor, threats: list[Threat]) 
 def compute_overall_risk(threats: list[Threat]) -> float:
     """
     Overall risk score 0-100.
-    Weighted sum: Critical=40pts, High=20pts, Medium=5pts, Low=1pt,
-    capped at 100.
+    Normalized: actual weighted severity sum / theoretical maximum (all Critical).
+    Avoids the additive-cap problem where 3+ Critical threats instantly hit 100
+    regardless of application size.
     """
+    if not threats:
+        return 0.0
     weights = {Severity.CRITICAL: 40, Severity.HIGH: 20, Severity.MEDIUM: 5, Severity.LOW: 1, Severity.INFO: 0}
     raw = sum(weights[t.severity] for t in threats)
-    return min(100.0, round(raw, 1))
+    max_possible = len(threats) * 40  # theoretical max: every threat Critical
+    return min(100.0, round((raw / max_possible) * 100, 1))
 
 
 def build_threat_model(app: ApplicationDescriptor, threats: list[Threat]) -> ThreatModel:
