@@ -126,8 +126,19 @@ Teams can gate PRs on risk score threshold. Same as gating on test failures, but
 
 ## Key technical facts to have ready
 
-- **Input formats**: YAML descriptor, OpenAPI/Swagger, Dockerfile, docker-compose, Kubernetes manifests — auto-detected
+- **Input formats**: YAML descriptor, OpenAPI/Swagger, Dockerfile, docker-compose, Kubernetes manifests, Terraform/HCL (`.tf`) — auto-detected
 - **STRIDE categories**: 6 — Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege
+
+### Parser feature matrix
+
+| Input | Extracts | STRIDE-specific rules |
+|---|---|---|
+| YAML descriptor | components, data flows, trust boundaries, compliance | — (purely declarative) |
+| OpenAPI/Swagger | API component, auth type, PII in schemas, tag-based flows | — (via API component rules) |
+| Dockerfile | base image, EXPOSE ports, ENV secrets, non-root user | — (via WEB_APP component rules) |
+| docker-compose | services, images, ports, env secrets, `depends_on` flows | — (via per-service component rules) |
+| Kubernetes | Deployments, Services, Ingress, NetworkPolicy, Secrets, Namespaces | privileged pods, runAsUser=0, missing probes |
+| Terraform/HCL | `resource`, `data`, `provider` blocks; EC2/RDS/S3/IAM/SG/LB | public S3 (I), IAM `*` (E), unencrypted RDS (I), SG `0.0.0.0/0` ingress (T) |
 - **Compliance frameworks checked**: GDPR, PCI-DSS, SOC2, HIPAA
 - **Standards referenced**: OWASP Top 10 2021, NIST 800-53
 - **LLM**: Ollama (local), model configurable via `THREAT_MODEL` env var, `OLLAMA_HOST` for endpoint
@@ -178,7 +189,6 @@ Reports land in `./output/` (or whatever `--output` you pass).
 
 ## Q: What would you improve or add next?
 
-- **Terraform / HCL parser** — model cloud infrastructure (IAM policies, S3 bucket ACLs, security groups) — this is where most real cloud risk lives
 - **DefectDojo push** — send findings via API directly to vuln management so they get triaged and tracked with SLAs
 - **SARIF output** — import into GitHub Security tab alongside SAST findings
 - **Diff mode** — compare two threat models and show what changed between versions — useful for PR reviews of architecture changes

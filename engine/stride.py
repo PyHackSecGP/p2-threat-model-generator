@@ -728,4 +728,7 @@ def run_stride(app: ApplicationDescriptor) -> list[Threat]:
         threats.extend(generate_component_threats(component, i))
     for j, flow in enumerate(app.data_flows, start=1):
         threats.extend(generate_dataflow_threats(flow, j))
+    # Parser-attached threats (e.g. Terraform config-level: public S3, IAM *).
+    # ponytail: single sidecar attribute is simpler than a parser-rules plugin bus.
+    threats.extend(getattr(app, "terraform_threats", []) or [])
     return threats

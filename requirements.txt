@@ -1,4 +1,5 @@
 pyyaml>=6.0
 requests>=2.31.0
 rich>=13.0.0
+python-hcl2>=4.3.0
 agent-core @ file:///home/tony/projects/agent-core

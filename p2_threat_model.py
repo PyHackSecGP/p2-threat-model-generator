@@ -28,6 +28,8 @@ def _detect_input_type(path: str) -> str:
     if name in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
         return "docker_compose"
     suffix = p.suffix.lower()
+    if suffix == ".tf" or (p.is_dir() and any(p.glob("*.tf"))):
+        return "terraform"
     if suffix in (".yaml", ".yml", ".json"):
         content = p.read_text()[:1024].lower()
         if "openapi" in content or "swagger" in content:
@@ -87,6 +89,9 @@ def _load_app(args):
     elif itype == "k8s":
         from parsers.k8s_parser import parse_k8s
         return parse_k8s(args.input)
+    elif itype == "terraform":
+        from parsers.terraform_parser import parse_terraform
+        return parse_terraform(args.input)
     else:
         print(f"Error: unknown input type '{itype}'", file=sys.stderr)
         sys.exit(1)
@@ -103,6 +108,7 @@ Input types (auto-detected):
   docker-compose.yml     python p2_threat_model.py --input docker-compose.yml
   Dockerfile             python p2_threat_model.py --input Dockerfile
   Kubernetes manifests   python p2_threat_model.py --input deployment.yaml
+  Terraform / HCL        python p2_threat_model.py --input main.tf
   Interactive wizard     python p2_threat_model.py --wizard
 
 Examples:
@@ -112,7 +118,7 @@ Examples:
         """,
     )
     parser.add_argument("--input", "-i", help="Input file path")
-    parser.add_argument("--input-type", choices=["yaml", "openapi", "docker_compose", "dockerfile", "k8s"],
+    parser.add_argument("--input-type", choices=["yaml", "openapi", "docker_compose", "dockerfile", "k8s", "terraform"],
                         help="Override auto-detection of input type")
     parser.add_argument("--output", "-o", default="output", help="Output directory (default: ./output)")
     parser.add_argument("--wizard", action="store_true", help="Run interactive wizard instead of file input")
